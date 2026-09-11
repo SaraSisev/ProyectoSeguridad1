@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cifrado y Descifrado — César / Atbash</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Sistema de Cifrado y Descifrado</h1>
+    <p>Basado en el código ASCII — César y Atbash</p>
+  </header>
+ 
+  <main>
+
+  <!-- ============ ALFABETO: fila completa arriba ============ -->
+  <section class="card" id="section-alphabet">
+    <h2>1. Conjunto de caracteres (alfabeto)</h2>
+
+    <form id="alphabet-form">
+      <label for="alphabet-input">Define tu conjunto de caracteres:</label>
+      <input
+        type="text"
+        id="alphabet-input"
+        placeholder="Ej: ABCDEFGHIJKLMNÑOPQRSTUVWXYZ0123456789"
+      />
+      <button type="submit">Aplicar alfabeto</button>
+      <p class="error" id="alphabet-error"></p>
+      <p class="hint" id="alphabet-status">Aún no has definido un alfabeto.</p>
+    </form>
+  </section>
+
+  <!-- ============ CIFRADO (izq) + DESCIFRADO (der) ============ -->
+  <div class="two-columns">
+
+    <section class="card" id="section-encrypt">
+      <h2>2. Cifrado</h2>
+      <form id="encrypt-form">
+        <div class="method-row">
+        <div class="method-field">
+          <label for="encrypt-method">Método:</label>
+          <select id="encrypt-method">
+            <option value="CESAR">César</option>
+            <option value="ATBASH">Atbash</option>
+          </select>
+        </div>
+
+        <div id="caesar-shift-group" class="shift-field">
+          <label for="encrypt-shift">Desplazamiento (1-25):</label>
+          <div class="shift-stepper">
+            <input type="number" id="encrypt-shift" value="3" min="1" max="25" step="1" />
+            <div class="stepper-buttons">
+              <button type="button" id="shift-up" aria-label="Aumentar desplazamiento">▲</button>
+              <button type="button" id="shift-down" aria-label="Disminuir desplazamiento">▼</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+        <label for="encrypt-text">Texto a cifrar:</label>
+        <textarea id="encrypt-text" rows="4"></textarea>
+
+        <button type="submit">Cifrar</button>
+        <p class="error" id="encrypt-error"></p>
+      </form>
+
+      <div class="result-box">
+        <strong>Resultado cifrado:</strong>
+        <pre id="encrypt-result"></pre>
+        <button type="button" class="copy-btn" id="copy-encrypt-result">Copiar al portapapeles</button>
+      </div>
+    </section>
+
+    <section class="card" id="section-decrypt">
+      <h2>3. Descifrado automático</h2>
+      <p class="hint">
+        El sistema detecta automáticamente el método (César o Atbash) sin intervención humana.
+      </p>
+
+      <form id="decrypt-form">
+        <label for="decrypt-text">Texto cifrado:</label>
+        <textarea id="decrypt-text" rows="4"></textarea>
+        <button type="submit">Descifrar</button>
+        <p class="error" id="decrypt-error"></p>
+      </form>
+
+      <div class="result-box">
+        <p><strong>Método detectado:</strong> <span id="decrypt-method-result">—</span></p>
+        <p><strong>Desplazamiento (si aplica):</strong> <span id="decrypt-shift-result">—</span></p>
+        <p><strong>Mensaje descifrado:</strong></p>
+        <pre id="decrypt-text-result"></pre>
+        <button type="button" class="copy-btn" id="copy-decrypt-result">Copiar al portapapeles</button>
+      </div>
+    </section>
+
+  </div>
+
+</main>
+
+  <footer>
+    <p>Proyecto académico — Cifrado clásico basado en ASCII</p>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

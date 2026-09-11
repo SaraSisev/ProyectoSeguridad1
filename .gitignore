@@ -1,0 +1,4 @@
+backend/.wrangler/
+backend/src/__pycache__/
+node_modules/
+*.pyc
