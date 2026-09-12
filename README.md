@@ -25,6 +25,8 @@ backend/  -> Cloudflare Worker en Python (beta "Python Workers"), se publica en 
 
 ## Backend — Cloudflare Workers (Python)
 
+**Ya desplegado en:** https://cifrado-cesar-atbash-backend.saracuevasc0.workers.dev
+
 Requisitos: Node.js (para la CLI `wrangler`) y una cuenta de Cloudflare.
 
 ```bash
@@ -34,11 +36,8 @@ wrangler login
 wrangler deploy
 ```
 
-Al terminar, `wrangler` imprime la URL pública del Worker, algo como:
-
-```
-https://cifrado-cesar-atbash-backend.<tu-subdominio>.workers.dev
-```
+Al terminar, `wrangler` imprime la URL pública del Worker. Si vuelves a desplegar (por
+ejemplo tras editar el código), el comando reutiliza la misma URL — no cambia.
 
 Para probar en local antes de desplegar:
 
@@ -66,18 +65,16 @@ Endpoints expuestos (todos `POST`, cuerpo y respuesta en JSON, con CORS abierto)
 
 ## Frontend — GitHub Pages
 
-1. Despliega primero el backend y copia la URL que te dio `wrangler`.
-2. Abre [`front/main.js`](front/main.js) y reemplaza la primera línea:
+`front/main.js` ya apunta a la URL real del backend desplegado, así que no hay que editar
+nada más:
 
-   ```js
-   const URL_API_BASE = "https://CAMBIA-ESTA-URL.workers.dev";
-   ```
-
-   por la URL real de tu Worker.
-3. Sube la carpeta `front/` a un repositorio de GitHub y activa GitHub Pages apuntando a esa
+1. Sube la carpeta `front/` a un repositorio de GitHub y activa GitHub Pages apuntando a esa
    carpeta (Settings → Pages → Deploy from a branch → carpeta `/front`, o mueve su contenido
    a la raíz del repo si prefieres servir desde `/`).
-4. GitHub Pages publicará `index.html` en `https://<usuario>.github.io/<repositorio>/`.
+2. GitHub Pages publicará `index.html` en `https://<usuario>.github.io/<repositorio>/`.
+
+Si en el futuro rehaces el Worker con otro nombre/subdominio, recuerda actualizar
+`URL_API_BASE` en [`front/main.js`](front/main.js).
 
 ## Notas de diseño
 
