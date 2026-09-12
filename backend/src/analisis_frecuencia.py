@@ -2,8 +2,8 @@ import re
 from collections import Counter
 
 from datos_espanol import (
+    SF7,
     SF8,
-    SF9,
     LETRAS_ESPANOL,
     VOCALES,
     FRECUENCIA_LETRAS,
@@ -24,7 +24,7 @@ from datos_espanol import (
 PATRON_REPETICION = re.compile(r"(.)\1{3,}")
 
 
-def SF13(texto_normalizado):
+def SF9(texto_normalizado):
     letras = [c for c in texto_normalizado if c in LETRAS_ESPANOL]
     total = len(letras)
     if total == 0:
@@ -43,7 +43,7 @@ def SF13(texto_normalizado):
     return 35.0 / (1.0 + chi_cuadrado_normalizado)
 
 
-def SF14(palabras):
+def SF10(palabras):
     puntaje = 0.0
     for palabra in palabras:
         if palabra in PALABRAS_MUY_COMUNES:
@@ -53,7 +53,7 @@ def SF14(palabras):
     return puntaje
 
 
-def SF15(texto_normalizado, tabla_pesos):
+def SF11(texto_normalizado, tabla_pesos):
     puntaje = 0.0
     for patron, peso in tabla_pesos.items():
         apariciones = texto_normalizado.count(patron)
@@ -61,7 +61,7 @@ def SF15(texto_normalizado, tabla_pesos):
     return puntaje
 
 
-def SF16(palabras):
+def SF12(palabras):
     puntaje = 0.0
     for palabra in palabras:
         for prefijo, peso in PESOS_PREFIJOS.items():
@@ -70,7 +70,7 @@ def SF16(palabras):
     return puntaje
 
 
-def SF17(palabras):
+def SF13(palabras):
     puntaje = 0.0
     for sufijo, peso in PESOS_SUFIJOS.items():
         for palabra in palabras:
@@ -79,14 +79,14 @@ def SF17(palabras):
     return puntaje
 
 
-def SF18(texto_normalizado):
+def SF14(texto_normalizado):
     penalizacion = 0.0
     for secuencia, peso in PESOS_SECUENCIAS_IMPROBABLES.items():
         penalizacion += texto_normalizado.count(secuencia) * peso
     return penalizacion
 
 
-def SF19(texto_normalizado):
+def SF15(texto_normalizado):
     letras = [c for c in texto_normalizado if c in LETRAS_ESPANOL]
     if not letras:
         return -20.0, 0.0
@@ -102,7 +102,7 @@ def SF19(texto_normalizado):
     return puntaje, ratio
 
 
-def SF20(palabra):
+def SF16(palabra):
     mas_larga = 0
     actual = 0
     for caracter in palabra:
@@ -114,7 +114,7 @@ def SF20(palabra):
     return mas_larga
 
 
-def SF21(palabras):
+def SF17(palabras):
     if not palabras:
         return -15.0
 
@@ -128,7 +128,7 @@ def SF21(palabras):
         if len(palabra) > 1 and not contiene_vocal:
             puntaje -= 3.0
 
-        secuencia_consonantes = SF20(palabra)
+        secuencia_consonantes = SF16(palabra)
         if secuencia_consonantes >= 5:
             puntaje -= (secuencia_consonantes - 4) * 1.50
 
@@ -138,20 +138,20 @@ def SF21(palabras):
     return puntaje
 
 
-def SF22(texto):
-    normalizado = SF8(texto)
-    palabras = SF9(normalizado)
+def SF18(texto):
+    normalizado = SF7(texto)
+    palabras = SF8(normalizado)
 
-    puntaje_frecuencia = SF13(normalizado)
-    puntaje_comunes = SF14(palabras)
-    puntaje_bigramas = SF15(normalizado, PESOS_BIGRAMAS)
-    puntaje_trigramas = SF15(normalizado, PESOS_TRIGRAMAS)
-    puntaje_tetragramas = SF15(normalizado, PESOS_TETRAGRAMAS)
-    puntaje_prefijos = SF16(palabras)
-    puntaje_sufijos = SF17(palabras)
-    puntaje_vocales, ratio_vocales = SF19(normalizado)
-    puntaje_estructura = SF21(palabras)
-    penalizacion = SF18(normalizado)
+    puntaje_frecuencia = SF9(normalizado)
+    puntaje_comunes = SF10(palabras)
+    puntaje_bigramas = SF11(normalizado, PESOS_BIGRAMAS)
+    puntaje_trigramas = SF11(normalizado, PESOS_TRIGRAMAS)
+    puntaje_tetragramas = SF11(normalizado, PESOS_TETRAGRAMAS)
+    puntaje_prefijos = SF12(palabras)
+    puntaje_sufijos = SF13(palabras)
+    puntaje_vocales, ratio_vocales = SF15(normalizado)
+    puntaje_estructura = SF17(palabras)
+    penalizacion = SF14(normalizado)
 
     total = (
         puntaje_frecuencia

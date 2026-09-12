@@ -16,9 +16,10 @@ backend/  -> Cloudflare Worker en Python (beta "Python Workers"), se publica en 
   src/
     alfabeto.py             -> validación del alfabeto y utilidades de índices/desplazamiento
     cifrado.py               -> cifrado César y Atbash
-    descifrado.py            -> César inverso + autodetección automática (Atbash o César)
-    datos_espanol.py         -> datos del idioma: corpus propio, frecuencias, n-gramas, diccionario
-    analisis_frecuencia.py   -> motor de Al-Kindi (calcula y combina 9 componentes de puntaje)
+    descifrado.py            -> primitiva de César inverso (con un desplazamiento dado)
+    datos_espanol.py         -> datos fijos del idioma: frecuencias, n-gramas, diccionario, morfología
+    analisis_frecuencia.py   -> calcula los 9 componentes del puntaje de un candidato
+    analizador.py            -> genera las 26 hipótesis, puntúa y elige la ganadora (Al-Kindi)
     entry.py                 -> punto de entrada del Worker (rutas HTTP, CORS)
 ```
 

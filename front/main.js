@@ -7,7 +7,7 @@ const LIMITE_ALFABETO = 256;
 
 let SFEstadoAlfabeto = null;
 
-async function SF33(ruta, cuerpo) {
+async function SF27(ruta, cuerpo) {
   const respuesta = await fetch(`${URL_API_BASE}${ruta}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -20,7 +20,7 @@ async function SF33(ruta, cuerpo) {
   return datos;
 }
 
-function SF34(mensaje, esError) {
+function SF28(mensaje, esError) {
   const estado = document.getElementById("alphabet-status");
   const error = document.getElementById("alphabet-error");
   if (esError) {
@@ -32,23 +32,23 @@ function SF34(mensaje, esError) {
   }
 }
 
-async function SF35(evento) {
+async function SF29(evento) {
   evento.preventDefault();
   const entrada = document.getElementById("alphabet-input").value;
   try {
-    const datos = await SF33("/api/alfabeto/validar", { alfabeto: entrada });
+    const datos = await SF27("/api/alfabeto/validar", { alfabeto: entrada });
     SFEstadoAlfabeto = entrada;
     try {
       localStorage.setItem("alfabetoActual", entrada);
     } catch (_) {}
-    SF34(`Alfabeto aplicado (${datos.longitud} caracteres).`, false);
+    SF28(`Alfabeto aplicado (${datos.longitud} caracteres).`, false);
   } catch (err) {
     SFEstadoAlfabeto = null;
-    SF34(err.message, true);
+    SF28(err.message, true);
   }
 }
 
-async function SF36(evento) {
+async function SF30(evento) {
   evento.preventDefault();
   const error = document.getElementById("encrypt-error");
   const resultado = document.getElementById("encrypt-result");
@@ -69,25 +69,23 @@ async function SF36(evento) {
   }
 
   try {
-    const datos = await SF33("/api/cifrar", cuerpo);
+    const datos = await SF27("/api/cifrar", cuerpo);
     resultado.textContent = datos.resultado;
   } catch (err) {
     error.textContent = err.message;
   }
 }
 
-async function SF37(evento) {
+async function SF31(evento) {
   evento.preventDefault();
   const error = document.getElementById("decrypt-error");
   const metodoResultado = document.getElementById("decrypt-method-result");
   const shiftResultado = document.getElementById("decrypt-shift-result");
-  const confianzaResultado = document.getElementById("decrypt-confidence-result");
   const textoResultado = document.getElementById("decrypt-text-result");
 
   error.textContent = "";
   metodoResultado.textContent = "—";
   shiftResultado.textContent = "—";
-  confianzaResultado.textContent = "—";
   textoResultado.textContent = "";
 
   if (!SFEstadoAlfabeto) {
@@ -98,25 +96,24 @@ async function SF37(evento) {
   const texto = document.getElementById("decrypt-text").value;
 
   try {
-    const datos = await SF33("/api/descifrar", { alfabeto: SFEstadoAlfabeto, texto });
+    const datos = await SF27("/api/descifrar", { alfabeto: SFEstadoAlfabeto, texto });
     metodoResultado.textContent = datos.metodo === "ATBASH" ? "Atbash" : "César";
     shiftResultado.textContent =
       datos.desplazamiento !== null && datos.desplazamiento !== undefined
         ? datos.desplazamiento
         : "No aplica";
-    confianzaResultado.textContent = `${datos.confianza.nivel} (${datos.confianza.porcentaje}%)`;
     textoResultado.textContent = datos.resultado;
   } catch (err) {
     error.textContent = err.message;
   }
 }
 
-function SF38(idOrigen) {
+function SF32(idOrigen) {
   const origen = document.getElementById(idOrigen);
   navigator.clipboard.writeText(origen.textContent || "").catch(() => {});
 }
 
-function SF39() {
+function SF33() {
   const metodo = document.getElementById("encrypt-method");
   const grupoShift = document.getElementById("caesar-shift-group");
   const campoShift = document.getElementById("encrypt-shift");
@@ -138,7 +135,7 @@ function SF39() {
   });
 }
 
-function SF40() {
+function SF34() {
   const entrada = document.getElementById("alphabet-input");
   const contador = document.getElementById("alphabet-counter");
 
@@ -152,24 +149,24 @@ function SF40() {
   actualizar();
 }
 
-function SF41() {
+function SF35() {
   try {
     const guardado = localStorage.getItem("alfabetoActual");
     if (guardado) {
       document.getElementById("alphabet-input").value = guardado;
       SFEstadoAlfabeto = guardado;
-      SF34(`Alfabeto restaurado (${guardado.length} caracteres).`, false);
+      SF28(`Alfabeto restaurado (${guardado.length} caracteres).`, false);
     }
   } catch (_) {}
 
-  document.getElementById("alphabet-form").addEventListener("submit", SF35);
-  document.getElementById("encrypt-form").addEventListener("submit", SF36);
-  document.getElementById("decrypt-form").addEventListener("submit", SF37);
-  document.getElementById("copy-encrypt-result").addEventListener("click", () => SF38("encrypt-result"));
-  document.getElementById("copy-decrypt-result").addEventListener("click", () => SF38("decrypt-text-result"));
+  document.getElementById("alphabet-form").addEventListener("submit", SF29);
+  document.getElementById("encrypt-form").addEventListener("submit", SF30);
+  document.getElementById("decrypt-form").addEventListener("submit", SF31);
+  document.getElementById("copy-encrypt-result").addEventListener("click", () => SF32("encrypt-result"));
+  document.getElementById("copy-decrypt-result").addEventListener("click", () => SF32("decrypt-text-result"));
 
-  SF39();
-  SF40();
+  SF33();
+  SF34();
 }
 
-document.addEventListener("DOMContentLoaded", SF41);
+document.addEventListener("DOMContentLoaded", SF35);
