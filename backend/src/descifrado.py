@@ -1,6 +1,6 @@
 from alfabeto import SF2, SF3, DESPLAZAMIENTO_MIN, DESPLAZAMIENTO_MAX
 from cifrado import SF5
-from analisis_frecuencia import SF13
+from analisis_frecuencia import SF22
 
 
 def SF6(texto, alfabeto, desplazamiento):
@@ -24,7 +24,7 @@ def SF7(texto_cifrado, alfabeto):
         "metodo": "ATBASH",
         "desplazamiento": None,
         "texto": texto_atbash,
-        "puntaje": SF13(texto_atbash),
+        "analisis": SF22(texto_atbash),
     })
 
     for desplazamiento in range(DESPLAZAMIENTO_MIN, DESPLAZAMIENTO_MAX + 1):
@@ -33,7 +33,7 @@ def SF7(texto_cifrado, alfabeto):
             "metodo": "CESAR",
             "desplazamiento": desplazamiento,
             "texto": texto_cesar,
-            "puntaje": SF13(texto_cesar),
+            "analisis": SF22(texto_cesar),
         })
 
-    return max(candidatos, key=lambda c: c["puntaje"])
+    return max(candidatos, key=lambda c: c["analisis"]["total"])

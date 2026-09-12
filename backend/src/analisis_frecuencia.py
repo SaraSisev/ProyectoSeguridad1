@@ -1,137 +1,185 @@
-TABLA_ACENTOS = str.maketrans("áéíóúÁÉÍÓÚüÜ", "aeiouAEIOUuU")
+import re
+from collections import Counter
 
-CORPUS_REFERENCIA = """
-Cada mañana, cuando el sol empieza a subir sobre las montañas, el pequeño
-pueblo despierta poco a poco. Los pájaros cantan cerca de la ventana y el
-aire huele a pan recién horneado. Mi abuela siempre dice que un buen
-desayuno con huevos, queso y jugo de naranja es la mejor manera de
-comenzar cualquier jornada de trabajo.
+from datos_espanol import (
+    SF8,
+    SF9,
+    LETRAS_ESPANOL,
+    VOCALES,
+    FRECUENCIA_LETRAS,
+    PALABRAS_MUY_COMUNES,
+    PALABRAS_COMUNES,
+    PESOS_BIGRAMAS,
+    PESOS_TRIGRAMAS,
+    PESOS_TETRAGRAMAS,
+    PESOS_PREFIJOS,
+    PESOS_SUFIJOS,
+    PESOS_SECUENCIAS_IMPROBABLES,
+    RATIO_VOCALES_OBJETIVO,
+    RATIO_VOCALES_MIN,
+    RATIO_VOCALES_MAX,
+    LONGITUD_PALABRA_MAX_RAZONABLE,
+)
 
-Durante el fin de semana, toda la familia se reúne en la cocina para
-preparar una comida especial. Mientras mi tío corta las verduras, mi
-prima organiza los platos y mi hermano menor juega con el perro en el
-jardín. A veces cocinamos un guiso de pollo con zanahoria, calabaza y un
-toque de pimienta; otras veces preferimos un simple arroz con frijoles y
-un poco de queso rallado por encima.
-
-La tecnología ha cambiado mucho la forma en que vivimos. Ahora es posible
-enviar un mensaje instantáneo a cualquier parte del mundo, ver una
-película en la televisión desde el teléfono o comprar un boleto de avión
-sin salir de casa. Sin embargo, muchos jóvenes extrañan los juegos
-tradicionales al aire libre, como saltar la cuerda, jugar al fútbol en el
-parque o simplemente conversar bajo la sombra de un árbol grande.
-
-El año pasado viajamos hacia el sur del país para conocer una antigua
-ciudad construida junto al río. Caminamos por calles estrechas de piedra,
-visitamos un museo con objetos de cerámica y compramos artesanías hechas
-a mano en un pequeño mercado. Por la noche, el cielo se llenaba de
-estrellas y el silencio del campo contrastaba con el ruido constante de
-la ciudad donde normalmente vivimos.
-
-El deporte también ocupa un lugar importante en nuestra rutina semanal.
-Los martes y jueves corremos varios kilómetros por el parque cercano,
-mientras que los sábados jugamos un partido amistoso de baloncesto o de
-voleibol con los vecinos. Después del ejercicio, siempre tomamos agua
-fresca y comemos alguna fruta, como una manzana, un kiwi o un poco de
-sandía, para recuperar energía.
-
-La historia de nuestra región está llena de relatos curiosos. Cuenta la
-leyenda que hace muchos siglos existió un pequeño reino gobernado por una
-reina muy justa, que ayudaba a los campesinos a mejorar sus cosechas y
-resolvía los conflictos entre vecinos con sabiduría y paciencia. Aunque
-nadie sabe con exactitud si esa historia es verdadera, los ancianos del
-pueblo todavía la cuentan con orgullo alrededor de una fogata durante las
-noches frías de invierno.
-
-Por último, no hay nada como disfrutar de un buen libro bajo la luz
-suave de una lámpara mientras afuera llueve suavemente. El sonido del
-agua golpeando la ventana, mezclado con el aroma de un café caliente,
-crea una sensación de tranquilidad difícil de explicar con palabras.
-Quizás por eso, después de un día largo de trabajo, muchas personas
-encuentran en la lectura un refugio sencillo pero muy valioso para
-descansar la mente y el corazón.
-"""
-
-PALABRAS_BASE = {
-    "DE", "LA", "QUE", "EL", "EN", "Y", "A", "LOS", "DEL", "SE", "LAS", "POR",
-    "UN", "PARA", "CON", "NO", "UNA", "SU", "AL", "LO", "COMO", "MAS", "PERO",
-    "SUS", "LE", "YA", "O", "ESTE", "SI", "PORQUE", "ESTA", "ENTRE", "CUANDO",
-    "MUY", "SIN", "SOBRE", "TAMBIEN", "ME", "HASTA", "HAY", "DONDE", "QUIEN",
-    "DESDE", "TODO", "NOS", "DURANTE", "TODOS", "UNO", "LES", "NI", "CONTRA",
-    "OTROS", "ESE", "ESO", "ANTE", "ELLOS", "ESTO", "MI", "ANTES", "ALGUNOS",
-    "UNOS", "YO", "OTRO", "OTRAS", "OTRA", "TANTO", "ESA", "ESTOS", "MUCHO",
-    "QUIENES", "NADA", "MUCHOS", "CUAL", "POCO", "ELLA", "ESTAR", "ESTAS",
-    "ALGUNAS", "ALGO", "NOSOTROS", "MIS", "TU", "TE", "TI", "TUS", "ELLAS",
-    "NOSOTRAS", "VOSOTROS", "VOSOTRAS", "OS", "SUYO", "SUYA", "NUESTRO",
-    "NUESTRA", "NUESTROS", "NUESTRAS", "ESOS", "ESAS", "ESTOY", "ESTAMOS",
-    "ESTAN", "SOY", "ERES", "ES", "SOMOS", "SOIS", "SON", "SEA", "HE", "HAS",
-    "HA", "HEMOS", "HAN", "HABIA", "HABIAN", "SERA", "SERAN", "TENGO",
-    "TIENES", "TIENE", "TENEMOS", "TIENEN", "HACER", "HAGO", "HACES", "HACE",
-    "HACEMOS", "HACEN", "HOLA", "MUNDO", "GRACIAS", "ADIOS", "AMOR", "VIDA",
-    "TIEMPO", "CASA", "AGUA", "DIA", "NOCHE", "SOL", "LUNA", "ATAQUE",
-    "AMANECER", "CONFIRMADO", "VERDAD", "MENSAJE", "SECRETO", "BIEN", "MAL",
-    "GRANDE", "BUENO", "MALO", "NUEVO", "VIEJO", "HOMBRE", "MUJER", "AMIGO",
-    "FAMILIA", "TRABAJO", "VER", "DAR", "IR", "VOY", "VA", "VAMOS", "SABER",
-    "QUERER", "QUIERO", "PODER", "PUEDE", "DECIR", "DICE", "AQUI", "ALLI",
-    "HOY", "AYER", "MANANA",
-}
+PATRON_REPETICION = re.compile(r"(.)\1{3,}")
 
 
-def SF8(texto):
-    return texto.translate(TABLA_ACENTOS)
-
-
-def SF9(texto):
-    limpio = SF8(texto).lower()
-    conteo = {chr(codigo): 0 for codigo in range(ord("a"), ord("z") + 1)}
-    conteo["ñ"] = 0
-    total = 0
-    for caracter in limpio:
-        if caracter in conteo:
-            conteo[caracter] += 1
-            total += 1
-    return conteo, total
-
-
-def SF10(texto):
-    limpio = SF8(texto).upper()
-    palabras = []
-    actual = []
-    for caracter in limpio:
-        if caracter.isalpha():
-            actual.append(caracter)
-        else:
-            if actual:
-                palabras.append("".join(actual))
-                actual = []
-    if actual:
-        palabras.append("".join(actual))
-    return palabras
-
-
-_CONTEO_CORPUS, _TOTAL_CORPUS = SF9(CORPUS_REFERENCIA)
-FREC_ESPANOL = {
-    letra: (veces / _TOTAL_CORPUS) * 100
-    for letra, veces in _CONTEO_CORPUS.items()
-}
-
-DICCIONARIO = PALABRAS_BASE | set(SF10(CORPUS_REFERENCIA))
-
-
-def SF11(texto):
-    conteo, total = SF9(texto)
+def SF13(texto_normalizado):
+    letras = [c for c in texto_normalizado if c in LETRAS_ESPANOL]
+    total = len(letras)
     if total == 0:
-        return 0.0
-    return sum(FREC_ESPANOL[letra] * veces for letra, veces in conteo.items()) / total
+        return -20.0
+
+    observadas = Counter(letras)
+    chi_cuadrado = 0.0
+    for letra, frecuencia_esperada in FRECUENCIA_LETRAS.items():
+        esperado = total * frecuencia_esperada / 100
+        if esperado == 0:
+            continue
+        observado = observadas.get(letra, 0)
+        chi_cuadrado += ((observado - esperado) ** 2) / esperado
+
+    chi_cuadrado_normalizado = chi_cuadrado / total
+    return 35.0 / (1.0 + chi_cuadrado_normalizado)
 
 
-def SF12(texto):
-    palabras = SF10(texto)
-    return sum(
-        len(palabra) for palabra in palabras
-        if len(palabra) >= 2 and palabra in DICCIONARIO
+def SF14(palabras):
+    puntaje = 0.0
+    for palabra in palabras:
+        if palabra in PALABRAS_MUY_COMUNES:
+            puntaje += 3.0 + min(len(palabra), 8) * 0.80
+        elif palabra in PALABRAS_COMUNES:
+            puntaje += 1.5 + min(len(palabra), 8) * 0.50
+    return puntaje
+
+
+def SF15(texto_normalizado, tabla_pesos):
+    puntaje = 0.0
+    for patron, peso in tabla_pesos.items():
+        apariciones = texto_normalizado.count(patron)
+        puntaje += apariciones * peso
+    return puntaje
+
+
+def SF16(palabras):
+    puntaje = 0.0
+    for palabra in palabras:
+        for prefijo, peso in PESOS_PREFIJOS.items():
+            if len(palabra) > len(prefijo) + 1 and palabra.startswith(prefijo):
+                puntaje += peso
+    return puntaje
+
+
+def SF17(palabras):
+    puntaje = 0.0
+    for sufijo, peso in PESOS_SUFIJOS.items():
+        for palabra in palabras:
+            if len(palabra) > len(sufijo) and palabra.endswith(sufijo):
+                puntaje += peso
+    return puntaje
+
+
+def SF18(texto_normalizado):
+    penalizacion = 0.0
+    for secuencia, peso in PESOS_SECUENCIAS_IMPROBABLES.items():
+        penalizacion += texto_normalizado.count(secuencia) * peso
+    return penalizacion
+
+
+def SF19(texto_normalizado):
+    letras = [c for c in texto_normalizado if c in LETRAS_ESPANOL]
+    if not letras:
+        return -20.0, 0.0
+
+    vocales = sum(1 for c in letras if c in VOCALES)
+    ratio = vocales / len(letras)
+    distancia = abs(ratio - RATIO_VOCALES_OBJETIVO)
+    puntaje = 12.0 - distancia * 40
+
+    if ratio < RATIO_VOCALES_MIN or ratio > RATIO_VOCALES_MAX:
+        puntaje -= 8.0
+
+    return puntaje, ratio
+
+
+def SF20(palabra):
+    mas_larga = 0
+    actual = 0
+    for caracter in palabra:
+        if caracter not in VOCALES:
+            actual += 1
+            mas_larga = max(mas_larga, actual)
+        else:
+            actual = 0
+    return mas_larga
+
+
+def SF21(palabras):
+    if not palabras:
+        return -15.0
+
+    puntaje = min(len(palabras), 6) * 0.50
+
+    for palabra in palabras:
+        if len(palabra) > LONGITUD_PALABRA_MAX_RAZONABLE:
+            puntaje -= (len(palabra) - LONGITUD_PALABRA_MAX_RAZONABLE) * 0.50
+
+        contiene_vocal = any(c in VOCALES for c in palabra)
+        if len(palabra) > 1 and not contiene_vocal:
+            puntaje -= 3.0
+
+        secuencia_consonantes = SF20(palabra)
+        if secuencia_consonantes >= 5:
+            puntaje -= (secuencia_consonantes - 4) * 1.50
+
+        if PATRON_REPETICION.search(palabra):
+            puntaje -= 3.0
+
+    return puntaje
+
+
+def SF22(texto):
+    normalizado = SF8(texto)
+    palabras = SF9(normalizado)
+
+    puntaje_frecuencia = SF13(normalizado)
+    puntaje_comunes = SF14(palabras)
+    puntaje_bigramas = SF15(normalizado, PESOS_BIGRAMAS)
+    puntaje_trigramas = SF15(normalizado, PESOS_TRIGRAMAS)
+    puntaje_tetragramas = SF15(normalizado, PESOS_TETRAGRAMAS)
+    puntaje_prefijos = SF16(palabras)
+    puntaje_sufijos = SF17(palabras)
+    puntaje_vocales, ratio_vocales = SF19(normalizado)
+    puntaje_estructura = SF21(palabras)
+    penalizacion = SF18(normalizado)
+
+    total = (
+        puntaje_frecuencia
+        + puntaje_comunes
+        + puntaje_bigramas
+        + puntaje_trigramas
+        + puntaje_tetragramas
+        + puntaje_prefijos
+        + puntaje_sufijos
+        + puntaje_vocales
+        + puntaje_estructura
+        - penalizacion
     )
 
-
-def SF13(texto):
-    return SF11(texto) + SF12(texto)
+    return {
+        "total": total,
+        "componentes": {
+            "frecuencia_letras": puntaje_frecuencia,
+            "palabras_comunes": puntaje_comunes,
+            "bigramas": puntaje_bigramas,
+            "trigramas": puntaje_trigramas,
+            "tetragramas": puntaje_tetragramas,
+            "prefijos": puntaje_prefijos,
+            "sufijos": puntaje_sufijos,
+            "vocales": puntaje_vocales,
+            "estructura_palabras": puntaje_estructura,
+            "secuencias_improbables": -penalizacion,
+        },
+        "ratio_vocales": ratio_vocales,
+        "num_palabras": len(palabras),
+    }

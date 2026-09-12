@@ -9,135 +9,120 @@ funciona internamente.
 
 ## Organización del backend
 
-El backend está dividido en un archivo por responsabilidad, sin más archivos de los
-necesarios:
-
 ```
 backend/src/
   alfabeto.py             -> validación del alfabeto y utilidades de índices/desplazamiento
   cifrado.py               -> las dos operaciones de cifrado: César y Atbash
   descifrado.py            -> César inverso + la autodetección automática (orquesta todo)
-  analisis_frecuencia.py   -> el motor de Al-Kindi: corpus propio, diccionario, puntuación
+  datos_espanol.py         -> datos del idioma: corpus propio, frecuencias, n-gramas, diccionario
+  analisis_frecuencia.py   -> el motor de Al-Kindi: calcula y combina los puntajes
   entry.py                 -> punto de entrada del Worker de Cloudflare (rutas HTTP, CORS)
 ```
 
-`alfabeto.py`, `cifrado.py`, `descifrado.py` y `analisis_frecuencia.py` son Python puro (sin
-dependencias del runtime de Cloudflare), por lo que pueden importarse y probarse de forma
-aislada. Solo `entry.py` depende del módulo `workers`, propio de Cloudflare.
+Todos salvo `entry.py` son Python puro (sin dependencias del runtime de Cloudflare), por lo
+que pueden importarse y probarse de forma aislada. Solo `entry.py` depende del módulo
+`workers`, propio de Cloudflare.
 
 ## Fundamento criptográfico (Al-Kindi)
 
 El descifrado automático (sin intervención humana) se basa en el **análisis de frecuencias**,
 técnica de criptoanálisis descrita por primera vez por **Abū Yūsuf Ya'qūb ibn Isḥāq al-Kindī**
-(أبو يوسف يعقوب بن إسحاق الكندي) en su tratado *Risāla fī Istikhrāj al-Muʿammā* (siglo IX). El
-método combina dos ingredientes, tal como los describía Al-Kindi: (1) qué tan frecuente es
-cada carácter en el idioma, y (2) el conocimiento del propio idioma (qué es una palabra real).
-Aquí eso se traduce en un **diccionario** de palabras españolas (`DICCIONARIO`, en
-`analisis_frecuencia.py`) combinado con la frecuencia de cada letra (`FREC_ESPANOL`, calculada
-—no copiada— a partir de un corpus de texto escrito para este proyecto).
+(أبو يوسف يعقوب بن إسحاق الكندي) en su tratado *Risāla fī Istikhrāj al-Muʿammā* (siglo IX).
+Al-Kindi no memorizaba una tabla de frecuencias ajena: analizaba texto real del idioma para
+derivar empíricamente sus patrones. Siguiendo ese mismo principio, **todos los datos
+lingüísticos de este proyecto** (`datos_espanol.py`) se calculan a partir de un corpus de
+texto en español **escrito específicamente para este proyecto** (`CORPUS_REFERENCIA`), nunca
+copiados de una tabla externa.
+
+### Cómo se decide el descifrado correcto
 
 El sistema **descifra el texto con las 26 claves posibles** (Atbash + los 25 desplazamientos
 César), calcula un **único puntaje numérico** para cada una de las 26 soluciones candidatas
-(`SF13`), y se queda con la que obtiene el **valor más alto** (`max(candidatos, key=...)` en
-`SF7`). No hay desempates artificiales ni reglas en cascada: es un solo número por candidato y
-gana el mayor, exactamente como debe funcionar un criptoanálisis por frecuencias.
+(`SF22`), y se queda con la que obtiene el **valor más alto**
+(`max(candidatos, key=lambda c: c["analisis"]["total"])`, en `SF7`). Un solo número por
+candidato, gana el mayor — sin reglas de desempate en cascada.
 
-### Cómo se calcula el puntaje de cada candidato
+Ese número combina **nueve componentes independientes**, cada uno midiendo una propiedad
+distinta de lo que hace que un texto "se vea como español real". Se suman entre sí (las
+penalizaciones se restan) porque cada componente aporta evidencia independiente: cuantos más
+componentes den una señal positiva, más confianza hay en que ese candidato es el texto
+original.
 
-`puntaje_total (SF13) = puntaje_por_frecuencia_de_caracteres (SF11) + puntaje_por_diccionario (SF12)`
+| Componente | Función | Qué mide |
+|---|---|---|
+| Frecuencia de letras | `SF13` | ¿La mezcla de letras se parece a la del español? (chi-cuadrado) |
+| Palabras del diccionario | `SF14` | ¿Aparecen palabras reales del español, y qué tan comunes son? |
+| Bigramas | `SF15` + `PESOS_BIGRAMAS` | ¿Aparecen combinaciones de 2 letras típicas del español ("de", "en", "ar"...)? |
+| Trigramas | `SF15` + `PESOS_TRIGRAMAS` | Lo mismo, con combinaciones de 3 letras ("que", "con", "ado"...) |
+| Tetragramas | `SF15` + `PESOS_TETRAGRAMAS` | Lo mismo, con combinaciones de 4 letras ("para", "ente"...) |
+| Prefijos | `SF16` | ¿Las palabras empiezan con prefijos típicos del español ("des-", "con-"...)? |
+| Sufijos | `SF17` | ¿Las palabras terminan en sufijos típicos ("-mente", "-ando", "-idad"...)? |
+| Proporción de vocales | `SF19` | ¿La proporción vocales/consonantes es la típica del español? |
+| Estructura de palabra | `SF21` | ¿Las palabras tienen forma razonable (no son cadenas de puras consonantes, ni tienen letras repetidas 4+ veces)? |
+| Secuencias improbables (penalización) | `SF18` | ¿Aparecen combinaciones casi imposibles en español ("qq", "jj", "wq"...)? |
 
-- **SF11 — frecuencia de caracteres:** cada letra del candidato aporta un peso igual a su
-  frecuencia estadística en español (`FREC_ESPANOL`); se promedia entre todas las letras del
-  candidato. Un candidato compuesto por letras poco comunes en español (por ejemplo, muchas
-  "k", "w" o "x") obtiene un promedio bajo; uno con la mezcla típica del español (mucha "a",
-  "e", "o", "s", "n"...) obtiene un promedio alto.
-- **SF12 — coincidencia con el diccionario:** se separa el candidato en palabras (cortando en
-  cualquier carácter no alfabético) y se suma la longitud de cada palabra de 2 o más letras
-  que exista en `DICCIONARIO`. Una palabra larga reconocida (por ejemplo "AMANECER") pesa
-  mucho más que una corta ("LA"), porque es prácticamente imposible que una palabra larga
-  aparezca por pura casualidad en un candidato incorrecto.
+### De dónde sale cada dato (nada citado de internet)
 
-Ambos números se sencillamente **suman**: cuando el candidato contiene palabras reales, el
-término del diccionario domina el resultado (es la señal más fuerte); cuando no se reconoce
-ninguna palabra (textos muy genéricos o con vocabulario fuera del diccionario), el desempate lo
-resuelve la frecuencia de caracteres. Por diseño, solo se le muestra al usuario la línea
-descifrada ganadora: el usuario nunca elige entre candidatos.
-
-### El diccionario (`DICCIONARIO`)
-
-No es una lista copiada de internet: se construye combinando dos fuentes propias del proyecto,
-ambas dentro de `analisis_frecuencia.py`:
-
-1. `PALABRAS_BASE`: un conjunto escrito a mano con las palabras gramaticales más frecuentes del
-   español (artículos, preposiciones, pronombres, verbos auxiliares muy comunes, saludos).
-2. Todas las palabras que aparecen realmente en `CORPUS_REFERENCIA` (extraídas con `SF10`),
-   el mismo texto en español escrito para este proyecto que también sirve para calcular
-   `FREC_ESPANOL`. Esto añade automáticamente sustantivos y verbos de vocabulario cotidiano
-   (familia, comida, tecnología, naturaleza, ciudad, deporte, historia, etc.) sin tener que
-   escribirlos dos veces ni copiar un diccionario externo.
-
-`DICCIONARIO = PALABRAS_BASE | palabras_extraidas_del_corpus` termina con más de 400 palabras.
+- **`FRECUENCIA_LETRAS`, `PESOS_BIGRAMAS`, `PESOS_TRIGRAMAS`, `PESOS_TETRAGRAMAS`,
+  `RATIO_VOCALES_OBJETIVO`**: se calculan contando directamente sobre `CORPUS_REFERENCIA`
+  (ver `SF10`, `SF11`, `SF12` en `datos_espanol.py`). Si alguien cambia el corpus, estos
+  números se recalculan solos la próxima vez que se importa el módulo — no son constantes
+  copiadas, son el resultado de un cálculo sobre texto propio.
+- **`PALABRAS_MUY_COMUNES` y `PALABRAS_COMUNES_BASE`**: lista de palabras gramaticales del
+  español escrita a mano (artículos, preposiciones, pronombres, verbos auxiliares); es
+  conocimiento básico del idioma, no un dataset de una fuente específica. `PALABRAS_COMUNES`
+  final añade además, automáticamente, todas las palabras distintas que aparecen en
+  `CORPUS_REFERENCIA`.
+- **`PESOS_PREFIJOS`, `PESOS_SUFIJOS`, `PESOS_SECUENCIAS_IMPROBABLES`**: reglas generales de
+  formación de palabras y de ortografía del español (por ejemplo, que "-mente" forma
+  adverbios, o que "qq"/"jj" no existen en español), escritas a mano por ser conocimiento
+  general del idioma, igual que uno "sabe" que en inglés "-ing" es un sufijo común sin
+  necesitar citar una fuente.
 
 ### Límite honesto del método (léelo si algo "no acierta")
 
 El análisis de frecuencias necesita que una parte razonable del mensaje haya sido realmente
 sustituida por el cifrado. Si el alfabeto que el usuario define **no incluye** las letras
-españolas comunes que aparecen en su texto (por ejemplo, un alfabeto compuesto casi
-enteramente de símbolos poco frecuentes, jeroglíficos u otros alfabetos, con solo un puñado de
-letras latinas), la mayor parte del mensaje pasa sin cifrar (tal como exige el enunciado: los
-caracteres fuera del alfabeto se "pasan por alto"). Con muy pocos caracteres realmente
-cifrados, **ningún método automático — ni tampoco un humano —** puede garantizar recuperar la
-clave real entre las 26 hipótesis posibles: varias claves distintas pueden producir, por pura
-coincidencia, texto que parece español válido. Esto no es un error de la implementación, es
-una limitación matemática del criptoanálisis por frecuencias con muestras pequeñas. Para
-resultados fiables, el alfabeto debe incluir las letras del español que realmente se van a
-usar en el texto a cifrar.
+españolas comunes que aparecen en su texto, la mayor parte del mensaje pasa sin cifrar (tal
+como exige el enunciado: los caracteres fuera del alfabeto se "pasan por alto"). Con muy pocos
+caracteres realmente cifrados, ningún método automático — ni tampoco un humano — puede
+garantizar recuperar la clave real entre las 26 hipótesis posibles. Para resultados fiables,
+el alfabeto debe incluir las letras del español que realmente se van a usar en el texto a
+cifrar.
 
 ---
 
 ## `backend/src/alfabeto.py`
 
 ### Constantes
-- `LIMITE_ALFABETO = 256`: número máximo de caracteres distintos permitidos en el alfabeto.
-  El frontend usa exactamente el mismo número (constante `LIMITE_ALFABETO` en `main.js`,
-  atributo `maxlength="256"` en el campo de alfabeto) para que ambos lados estén siempre de
-  acuerdo.
-- `DESPLAZAMIENTO_MIN = 1`, `DESPLAZAMIENTO_MAX = 25`: rango permitido para el desplazamiento
-  César. También coincide exactamente con los atributos `min="1"` / `max="25"` del campo de
-  desplazamiento en `front/index.html` y con los límites del stepper (`SF26`).
+- `LIMITE_ALFABETO = 256`: máximo de caracteres distintos del alfabeto. El frontend usa el
+  mismo número (`LIMITE_ALFABETO` en `main.js`, `maxlength="256"` en el HTML).
+- `DESPLAZAMIENTO_MIN = 1`, `DESPLAZAMIENTO_MAX = 25`: rango del desplazamiento César, igual
+  que los atributos `min`/`max` del campo de desplazamiento en `front/index.html`.
 
 ### SF1
-- **Parámetros:** `alfabeto` (str) — el conjunto de caracteres que el usuario quiere usar.
+- **Parámetros:** `alfabeto` (str).
 - **Ubicación:** `backend/src/alfabeto.py`.
-- **Qué hace:** valida que el alfabeto sea utilizable: que sea una cadena no vacía, que no
-  supere `LIMITE_ALFABETO` (256) caracteres, que no tenga caracteres repetidos y que tenga al
-  menos 2 caracteres distintos (mínimo necesario para que un desplazamiento tenga efecto).
-- **Cómo lo hace:** convierte la cadena en lista de caracteres Unicode (cada carácter, sin
-  importar si es ASCII, chino, árabe, un jeroglífico, etc., cuenta como un solo elemento
-  porque Python 3 itera cadenas por punto de código completo, no por bytes ni por unidades
-  UTF-16) y compara `len(lista)` contra `len(set(lista))` para detectar duplicados.
+- **Qué hace:** valida que el alfabeto sea utilizable: cadena no vacía, máximo 256
+  caracteres, sin repetidos, al menos 2 caracteres distintos.
+- **Cómo lo hace:** convierte la cadena en lista de caracteres Unicode (cada carácter, sea
+  ASCII, chino, árabe, un jeroglífico, etc., cuenta como un solo elemento porque Python 3
+  itera por punto de código completo) y compara `len(lista)` contra `len(set(lista))`.
 - **Devuelve:** tupla `(valido: bool, mensaje_error: str)`.
-- **Quién la usa:** `SF17`, `SF18`, `SF19` (en `entry.py`) antes de cualquier operación de
-  cifrado/descifrado.
+- **Quién la usa:** `SF26`, `SF27`, `SF28` (en `entry.py`).
 
 ### SF2
 - **Parámetros:** `alfabeto` (str).
 - **Ubicación:** `backend/src/alfabeto.py`.
-- **Qué hace:** construye el mapa `carácter -> posición` dentro del alfabeto (posición 0 a
-  `len(alfabeto)-1`).
-- **Cómo lo hace:** comprensión de diccionario sobre `enumerate(alfabeto)`.
-- **Quién la usa:** `SF4`, `SF5` (en `cifrado.py`) y `SF6` (en `descifrado.py`) para saber en
-  qué posición está cada carácter antes de desplazarlo o invertirlo.
+- **Qué hace:** construye el mapa `carácter -> posición` dentro del alfabeto.
+- **Quién la usa:** `SF4`, `SF5` (en `cifrado.py`) y `SF6` (en `descifrado.py`).
 
 ### SF3
 - **Parámetros:** `desplazamiento` (int, 1-25), `longitud_alfabeto` (int).
 - **Ubicación:** `backend/src/alfabeto.py`.
-- **Qué hace:** valida que el desplazamiento sea un entero dentro del rango permitido
-  (1 a 25, tal como exige el proyecto) y lo normaliza al tamaño real del alfabeto mediante
-  módulo, para que el índice resultante nunca se salga de rango.
-- **Cómo lo hace:** `desplazamiento % longitud_alfabeto`.
-- **Lanza:** `ValueError` con mensaje en español si el valor no es un entero válido o está
-  fuera de 1-25.
+- **Qué hace:** valida el rango 1-25 y normaliza el desplazamiento al tamaño real del
+  alfabeto (`% longitud_alfabeto`).
+- **Lanza:** `ValueError` si no es un entero válido o está fuera de rango.
 - **Quién la usa:** `SF4` (en `cifrado.py`) y `SF6` (en `descifrado.py`).
 
 ---
@@ -147,170 +132,242 @@ usar en el texto a cifrar.
 Importa `SF2` y `SF3` de `alfabeto.py`.
 
 ### SF4 (César — cifrar)
-- **Parámetros:** `texto` (str, texto plano en español), `alfabeto` (str), `desplazamiento`
-  (int, 1-25).
+- **Parámetros:** `texto` (str), `alfabeto` (str), `desplazamiento` (int, 1-25).
 - **Ubicación:** `backend/src/cifrado.py`.
-- **Qué hace:** cifra `texto` con César sobre el alfabeto dado.
-- **Cómo lo hace:** para cada carácter del texto, si está dentro del alfabeto (según el mapa
-  de `SF2`) se reemplaza por el carácter que está `desplazamiento` posiciones adelante (con
-  vuelta cíclica, `% len(alfabeto)`); si el carácter **no** está en el alfabeto (espacios,
-  puntuación no incluida, letras no incluidas, etc.) se deja exactamente igual — se "pasa por
-  alto", tal como pide el enunciado.
-- **Devuelve:** el texto cifrado (str).
-- **Quién la usa:** `SF18` en `entry.py` cuando el usuario elige el método "CESAR".
+- **Qué hace:** cifra `texto` con César. Para cada carácter, si está en el alfabeto, se
+  reemplaza por el que está `desplazamiento` posiciones adelante (cíclico); si no está en el
+  alfabeto se deja igual ("se pasa por alto").
+- **Quién la usa:** `SF27` en `entry.py`.
 
 ### SF5 (Atbash — cifra y descifra, es autoinverso)
 - **Parámetros:** `texto` (str), `alfabeto` (str).
 - **Ubicación:** `backend/src/cifrado.py`.
-- **Qué hace:** aplica la transformación Atbash: cada carácter se reemplaza por el que ocupa
-  la posición simétrica del alfabeto (`longitud - 1 - posición`). Al ser una involución
-  (aplicarla dos veces devuelve el texto original), la misma función sirve para cifrar y para
-  descifrar; no existe una función Atbash separada en `descifrado.py` porque sería código
-  duplicado.
-- **Quién la usa:** `SF18` en `entry.py` cuando el usuario elige "ATBASH" para cifrar, y
-  `SF7` en `descifrado.py`, que la importa para generar el candidato Atbash durante la
-  autodetección.
+- **Qué hace:** cada carácter se reemplaza por el simétrico del alfabeto
+  (`longitud - 1 - posición`). Al ser una involución, sirve para cifrar y descifrar con la
+  misma función.
+- **Quién la usa:** `SF27` en `entry.py` (cifrar) y `SF7` en `descifrado.py` (candidato Atbash
+  durante la autodetección).
 
 ---
 
 ## `backend/src/descifrado.py`
 
-Importa `SF2`, `SF3` y las constantes de `alfabeto.py`; importa `SF5` de `cifrado.py`; importa
-`SF13` de `analisis_frecuencia.py`.
+Importa `SF2`, `SF3` y constantes de `alfabeto.py`; `SF5` de `cifrado.py`; `SF22` de
+`analisis_frecuencia.py`.
 
 ### SF6 (César — descifrar)
 - **Parámetros:** `texto` (str), `alfabeto` (str), `desplazamiento` (int, 1-25).
 - **Ubicación:** `backend/src/descifrado.py`.
-- **Qué hace:** operación inversa de `SF4`: resta el desplazamiento en vez de sumarlo (mismo
-  criterio de "pasar por alto" los caracteres fuera del alfabeto).
-- **Quién la usa:** `SF7`, que la invoca 25 veces (una por cada desplazamiento posible) para
-  generar los candidatos que luego se puntúan con `SF13`.
+- **Qué hace:** inversa de `SF4`: resta el desplazamiento en vez de sumarlo.
+- **Quién la usa:** `SF7`, 25 veces (una por desplazamiento).
 
 ### SF7 (autodetección — el "cerebro" de Al-Kindi)
 - **Parámetros:** `texto_cifrado` (str), `alfabeto` (str).
 - **Ubicación:** `backend/src/descifrado.py`.
-- **Qué hace:** implementa la autodetección exigida por el proyecto: sin ninguna intervención
-  humana, determina si el texto fue cifrado con Atbash o con César (y con qué desplazamiento).
-- **Cómo lo hace:**
-  1. Genera el candidato de descifrado Atbash con `SF5` (de `cifrado.py`).
-  2. Genera los 25 candidatos de descifrado César (desplazamientos 1 a 25) con `SF6`.
-  3. Calcula el puntaje único combinado (`SF13`, de `analisis_frecuencia.py`) de cada uno de
-     los 26 candidatos.
-  4. Elige el candidato con el puntaje **más alto**: `max(candidatos, key=lambda c:
-     c["puntaje"])`. Un solo número, gana el mayor — sin reglas de desempate en cascada.
-- **Devuelve:** diccionario `{"metodo": "ATBASH"|"CESAR", "desplazamiento": int|None,
-  "texto": str, "puntaje": float}`.
-- **Quién la usa:** `SF19` (en `entry.py`). Solo el resultado de esta función se le muestra al
-  usuario — es la única línea "correcta" que exige el enunciado.
+- **Qué hace:** determina, sin intervención humana, si el texto fue cifrado con Atbash o
+  César (y con qué desplazamiento).
+- **Cómo lo hace:** genera el candidato Atbash (`SF5`) y los 25 candidatos César (`SF6`);
+  calcula el análisis multi-componente completo de cada uno con `SF22`; elige el de mayor
+  `analisis["total"]` con `max(...)`.
+- **Devuelve:** `{"metodo": "ATBASH"|"CESAR", "desplazamiento": int|None, "texto": str,
+  "analisis": {"total": float, "componentes": {...}, "ratio_vocales": float,
+  "num_palabras": int}}`.
+- **Quién la usa:** `SF28` (en `entry.py`), que solo expone al usuario `metodo`,
+  `desplazamiento` y `texto` — la única línea "correcta" que exige el enunciado.
+
+---
+
+## `backend/src/datos_espanol.py`
+
+Todos los datos del idioma español que usa el motor de análisis. No depende de ningún otro
+archivo del proyecto.
+
+### `CORPUS_REFERENCIA` (constante)
+Texto en español de varios párrafos, escrito específicamente para este proyecto, usado para
+derivar **todos** los datos de abajo. Tiene vocabulario variado a propósito (para que
+aparezcan letras poco frecuentes como `k`, `w`, `x`, `z`, `j`, `ñ`, `q`) y nutre también el
+diccionario con sustantivos y verbos reales, no solo palabras gramaticales.
+
+### `LETRAS_ESPANOL`, `VOCALES`, `PATRON_PALABRA` (constantes)
+El alfabeto español en minúsculas, el conjunto de vocales (con tilde), y la expresión regular
+`[a-zñ]+` usada para separar palabras.
+
+### SF8
+- **Parámetros:** `texto` (str).
+- **Ubicación:** `backend/src/datos_espanol.py`.
+- **Qué hace:** normaliza el texto para el análisis: lo pasa a minúsculas y sustituye vocales
+  acentuadas por su forma base (á→a, é→e, í→i, ó→o, ú→u, ü→u). No toca la `ñ` (letra distinta,
+  con su propia frecuencia). Nunca se usa para el texto que ve el usuario, solo para análisis
+  interno.
+- **Quién la usa:** internamente en este módulo (para construir todos los datos derivados del
+  corpus) y en `analisis_frecuencia.py` (`SF22`) para normalizar cada candidato.
+
+### SF9
+- **Parámetros:** `texto_normalizado` (str, ya pasado por `SF8`).
+- **Ubicación:** `backend/src/datos_espanol.py`.
+- **Qué hace:** separa el texto en palabras usando `PATRON_PALABRA` (agrupa letras
+  consecutivas; cualquier otro carácter corta la palabra).
+- **Quién la usa:** para construir `PALABRAS_COMUNES` a partir del corpus, y en
+  `analisis_frecuencia.py` (`SF22`) para obtener las palabras de cada candidato.
+
+### SF10
+- **Parámetros:** `texto_normalizado` (str).
+- **Ubicación:** `backend/src/datos_espanol.py`.
+- **Qué hace:** cuenta cuántas veces aparece cada letra española en el texto (incluye las 27
+  letras con conteo 0 si no aparecen, para que ninguna falte del diccionario resultante).
+- **Devuelve:** `Counter` (subclase de dict).
+- **Quién la usa:** una sola vez, sobre `CORPUS_REFERENCIA`, para calcular `FRECUENCIA_LETRAS`
+  y `RATIO_VOCALES_OBJETIVO`.
+
+### SF11
+- **Parámetros:** `texto_normalizado` (str), `n` (int, tamaño del n-grama: 2, 3 o 4).
+- **Ubicación:** `backend/src/datos_espanol.py`.
+- **Qué hace:** cuenta cuántas veces aparece cada secuencia contigua de `n` letras (ventana
+  deslizante), descartando cualquier fragmento que contenga un carácter que no sea una letra
+  española (para no mezclar fragmentos que crucen espacios o signos de puntuación).
+- **Devuelve:** `Counter` de n-gramas.
+- **Quién la usa:** `SF12`.
+
+### SF12
+- **Parámetros:** `texto_normalizado` (str), `n` (int), `peso_maximo` (float), 
+  `minimo_apariciones` (int).
+- **Ubicación:** `backend/src/datos_espanol.py`.
+- **Qué hace:** construye una tabla de pesos para n-gramas: cuenta con `SF11`, descarta los
+  que aparecen menos de `minimo_apariciones` veces (para no incluir ruido estadístico de un
+  corpus pequeño) y escala el conteo del más frecuente restante a `peso_maximo` (los demás en
+  proporción).
+- **Devuelve:** `dict[ngrama, peso]`.
+- **Quién la usa:** para construir `PESOS_BIGRAMAS` (n=2, peso máx. 1.20, mínimo 4
+  apariciones), `PESOS_TRIGRAMAS` (n=3, peso máx. 1.80, mínimo 3) y `PESOS_TETRAGRAMAS` (n=4,
+  peso máx. 2.20, mínimo 2) — todos calculados sobre `CORPUS_REFERENCIA` al importar el
+  módulo.
+
+### Constantes calculadas del corpus
+- `FRECUENCIA_LETRAS`: porcentaje de cada letra española en `CORPUS_REFERENCIA` (via `SF10`).
+- `RATIO_VOCALES_OBJETIVO`, `RATIO_VOCALES_MIN` (objetivo − 0.20), `RATIO_VOCALES_MAX`
+  (objetivo + 0.20): proporción real de vocales sobre el total de letras del corpus, con un
+  margen de tolerancia de ±0.20 alrededor de ese valor.
+- `PESOS_BIGRAMAS`, `PESOS_TRIGRAMAS`, `PESOS_TETRAGRAMAS`: ver `SF12`.
+- `PALABRAS_COMUNES = PALABRAS_COMUNES_BASE | palabras_del_corpus`: más de 400 palabras.
+
+### Constantes escritas a mano (conocimiento general del idioma)
+- `PALABRAS_MUY_COMUNES`: las ~20 palabras gramaticales más frecuentes del español (de, la,
+  que, el, en, y, a, los...).
+- `PALABRAS_COMUNES_BASE`: un conjunto más amplio de palabras gramaticales y verbos/adjetivos
+  comunes.
+- `PESOS_PREFIJOS`: prefijos españoles típicos (des-, pre-, re-, in-, con-, com-, pro-, sub-,
+  inter-, anti-) con un peso relativo.
+- `PESOS_SUFIJOS`: sufijos españoles típicos (-mente, -ción, -idad, -ando, -iendo, -ado,
+  -oso/a, -able/ible, -ar/-er/-ir) con un peso relativo.
+- `PESOS_SECUENCIAS_IMPROBABLES`: combinaciones de letras casi inexistentes en español (jj,
+  kk, ww, qq, zx, xq...) con una penalización.
+- `LONGITUD_PALABRA_MAX_RAZONABLE = 18`: longitud a partir de la cual una "palabra" empieza a
+  penalizarse por ser sospechosamente larga.
 
 ---
 
 ## `backend/src/analisis_frecuencia.py`
 
-El motor de Al-Kindi. No depende de ningún otro archivo del proyecto.
+El motor de puntuación. Importa de `datos_espanol.py` todo lo que necesita.
 
-### `CORPUS_REFERENCIA` (constante, no es función)
-Texto en español de varios párrafos, **escrito específicamente para este proyecto** (no
-copiado de ninguna fuente externa), usado para derivar empíricamente la frecuencia de cada
-letra — el mismo principio que usó Al-Kindi: analizar texto real en vez de citar una tabla.
-Se escribió con vocabulario variado a propósito para que aparezcan también las letras menos
-frecuentes del español (`k`, `w`, `x`, `z`, `j`, `ñ`, `q`, etc.) y para nutrir el diccionario
-(ver `DICCIONARIO` más abajo) con sustantivos y verbos reales, no solo palabras gramaticales.
-
-### `PALABRAS_BASE` (constante, no es función)
-Conjunto escrito a mano con las palabras gramaticales más frecuentes del español (artículos,
-preposiciones, pronombres, verbos auxiliares comunes, saludos, sin tildes y en mayúsculas).
-Es la mitad "manual" del diccionario; la otra mitad se extrae automáticamente del corpus
-(ver `SF10` y `DICCIONARIO`).
-
-### SF8
-- **Parámetros:** `texto` (str).
+### SF13 (frecuencia de letras)
+- **Parámetros:** `texto_normalizado` (str).
 - **Ubicación:** `backend/src/analisis_frecuencia.py`.
-- **Qué hace:** normaliza vocales acentuadas a su forma base (á→a, é→e, í→i, ó→o, ú→u, ü→u,
-  incluyendo mayúsculas) usando una tabla de traducción (`TABLA_ACENTOS`). **No** afecta la
-  letra `ñ` (se preserva tal cual porque es una letra distinta en el alfabeto español, con su
-  propia frecuencia).
-- **Por qué existe:** el análisis debe contar "e" y "é" como la misma letra estadística, y
-  reconocer "CAMPESINO" y "CAMPESINO" (con o sin tilde) como la misma palabra del diccionario;
-  esta función solo se usa para esa normalización interna, nunca para el texto que finalmente
-  se le muestra al usuario.
-- **Quién la usa:** `SF9`, `SF10`.
+- **Qué hace:** mide qué tan parecida es la mezcla de letras del candidato a
+  `FRECUENCIA_LETRAS`, con el estadístico chi-cuadrado clásico:
+  `Σ (observado - esperado)² / esperado`, normalizado entre el total de letras y convertido a
+  un puntaje acotado con `35 / (1 + chi_cuadrado_normalizado)`. Cuanto más se parezca la
+  distribución, más cerca de 35; cuanto más se aleje, más cerca de 0.
+- **Caso especial:** sin letras españolas reconocibles, devuelve `-20.0` (penaliza fuerte:
+  un candidato sin ninguna letra española no puede ser texto en español).
+- **Quién la usa:** `SF22`.
 
-### SF9
-- **Parámetros:** `texto` (str).
+### SF14 (palabras del diccionario)
+- **Parámetros:** `palabras` (list[str]).
 - **Ubicación:** `backend/src/analisis_frecuencia.py`.
-- **Qué hace:** cuenta cuántas veces aparece cada letra española (a-z, ñ) en el texto.
-- **Cómo lo hace:** pasa el texto por `SF8` (quita tildes de vocales) y lo pone en
-  minúsculas; recorre carácter por carácter y, si el carácter es una de las 27 letras del
-  español, incrementa su contador y el total.
-- **Devuelve:** tupla `(conteo: dict[letra, int], total: int)`.
-- **Quién la usa:** se llama una vez sobre `CORPUS_REFERENCIA` al importar el módulo (para
-  calcular `FREC_ESPANOL`) y luego se reutiliza dentro de `SF11` para analizar cada candidato
-  de descifrado.
+- **Qué hace:** recorre las palabras del candidato; si una palabra está en
+  `PALABRAS_MUY_COMUNES` suma `3.0 + min(longitud, 8) * 0.80`; si está en `PALABRAS_COMUNES`
+  suma `1.5 + min(longitud, 8) * 0.50`. Las palabras muy comunes (artículos, preposiciones)
+  valen más porque su aparición es un indicio fortísimo de español real; las palabras comunes
+  valen algo menos. Ambas ganan un poco más de puntaje cuanto más largas son (hasta 8 letras),
+  porque una coincidencia larga es más difícil que ocurra por azar.
+- **Quién la usa:** `SF22`.
 
-### SF10
-- **Parámetros:** `texto` (str).
+### SF15 (patrones — bigramas, trigramas y tetragramas)
+- **Parámetros:** `texto_normalizado` (str), `tabla_pesos` (dict, una de `PESOS_BIGRAMAS`,
+  `PESOS_TRIGRAMAS` o `PESOS_TETRAGRAMAS`).
 - **Ubicación:** `backend/src/analisis_frecuencia.py`.
-- **Qué hace:** separa el texto en palabras.
-- **Cómo lo hace:** pasa el texto por `SF8` y lo pone en mayúsculas; recorre carácter por
-  carácter agrupando letras consecutivas en una palabra; cualquier carácter no alfabético
-  (espacio, coma, símbolo fuera del alfabeto, dígito, etc.) cierra la palabra actual y
-  comienza una nueva.
-- **Devuelve:** lista de palabras (str, en mayúsculas, sin tildes en vocales).
-- **Quién la usa:** se llama una vez sobre `CORPUS_REFERENCIA` al importar el módulo (para
-  construir `DICCIONARIO`) y luego se reutiliza dentro de `SF12` para analizar cada candidato
-  de descifrado.
+- **Qué hace:** función genérica reutilizada tres veces (una por tamaño de n-grama): para cada
+  patrón de la tabla, cuenta cuántas veces aparece como subcadena en el texto
+  (`texto.count(patron)`) y suma `apariciones * peso`.
+- **Quién la usa:** `SF22`, una vez con cada una de las tres tablas.
 
-### `FREC_ESPANOL` (constante calculada, no hardcodeada)
-Justo después de definir `SF9`, el módulo la ejecuta una vez sobre `CORPUS_REFERENCIA` y
-convierte los conteos en porcentajes: `FREC_ESPANOL = {letra: (veces/total)*100 ...}`. Al
-calcularse en código a partir de un texto propio, no reproduce ninguna tabla de una fuente
-externa.
-
-### `DICCIONARIO` (constante calculada)
-`DICCIONARIO = PALABRAS_BASE | set(SF10(CORPUS_REFERENCIA))`: une las palabras gramaticales
-escritas a mano con todas las palabras distintas que aparecen en el corpus propio. Resultado:
-más de 400 palabras españolas reales (artículos, verbos, sustantivos de vocabulario cotidiano)
-sin copiar ningún diccionario externo.
-
-### SF11 (puntaje por frecuencia de caracteres)
-- **Parámetros:** `texto` (str) — un candidato de texto descifrado.
+### SF16 (prefijos)
+- **Parámetros:** `palabras` (list[str]).
 - **Ubicación:** `backend/src/analisis_frecuencia.py`.
-- **Qué hace:** calcula qué tan "española" es la mezcla de letras del candidato, en un único
-  número que **hay que maximizar** (a diferencia de una distancia estadística, que se
-  minimizaría).
-- **Cómo lo hace:** cuenta las letras del texto con `SF9`; a cada letra observada le asigna
-  como peso su frecuencia en `FREC_ESPANOL`, suma esos pesos y divide entre el total de letras
-  contadas (promedio). Un candidato con muchas vocales y consonantes comunes del español
-  (a, e, o, s, n, r...) obtiene un promedio alto; uno dominado por letras raras en español
-  obtiene un promedio bajo.
-- **Caso especial:** si el texto no contiene ninguna letra española reconocible (`total == 0`),
-  devuelve `0.0` (neutral: ni ayuda ni perjudica al candidato).
-- **Quién la usa:** `SF13`.
+- **Qué hace:** para cada palabra, revisa si empieza con alguno de `PESOS_PREFIJOS`
+  (exigiendo que la palabra sea al menos 2 letras más larga que el prefijo, para no contar
+  palabras que son *solo* el prefijo) y suma el peso correspondiente.
+- **Quién la usa:** `SF22`.
 
-### SF12 (puntaje por diccionario)
-- **Parámetros:** `texto` (str) — un candidato de texto descifrado.
+### SF17 (sufijos)
+- **Parámetros:** `palabras` (list[str]).
 - **Ubicación:** `backend/src/analisis_frecuencia.py`.
-- **Por qué existe:** el promedio de frecuencia de `SF11` es fiable con textos largos, pero
-  con textos o palabras muy cortas la estadística tiene demasiado poco material y puede
-  equivocarse por azar. Reconocer palabras reales del diccionario es una señal mucho más
-  fuerte, incluso con una sola palabra.
-- **Cómo lo hace:** separa el texto en palabras con `SF10` y suma la **longitud** de cada
-  palabra de 2 o más letras que aparezca en `DICCIONARIO` (las palabras de una sola letra no
-  se cuentan porque podrían coincidir por puro azar, y se pondera por longitud para que una
-  coincidencia larga —p. ej. "AMANECER"— pese mucho más que una corta y sea prácticamente
-  imposible que ocurra por casualidad en un candidato equivocado).
-- **Devuelve:** un entero (0 si no reconoce ninguna palabra del diccionario).
-- **Quién la usa:** `SF13`.
+- **Qué hace:** simétrico a `SF16` pero con `PESOS_SUFIJOS` y `endswith`.
+- **Quién la usa:** `SF22`.
 
-### SF13 (puntaje total — el número que decide todo)
-- **Parámetros:** `texto` (str) — un candidato de texto descifrado.
+### SF18 (penalización de secuencias improbables)
+- **Parámetros:** `texto_normalizado` (str).
 - **Ubicación:** `backend/src/analisis_frecuencia.py`.
-- **Qué hace:** suma `SF11(texto) + SF12(texto)` en un único valor.
-- **Por qué así:** el enunciado del usuario pedía exactamente esto — probar todas las
-  soluciones posibles y quedarse con la de **mayor valor**. Al ser una sola suma, `SF7` puede
-  usar `max()` directamente sobre los 26 candidatos sin reglas de desempate adicionales.
-- **Quién la usa:** `SF7` (en `descifrado.py`), para comparar los 26 candidatos posibles.
+- **Qué hace:** para cada secuencia de `PESOS_SECUENCIAS_IMPROBABLES`, cuenta apariciones y
+  acumula la penalización. Se resta (no se suma) al puntaje total en `SF22`.
+- **Quién la usa:** `SF22`.
+
+### SF19 (proporción de vocales)
+- **Parámetros:** `texto_normalizado` (str).
+- **Ubicación:** `backend/src/analisis_frecuencia.py`.
+- **Qué hace:** calcula la proporción de vocales sobre el total de letras del candidato y la
+  compara con `RATIO_VOCALES_OBJETIVO`: `puntaje = 12.0 - |ratio - objetivo| * 40`; si la
+  proporción se sale del rango razonable (`RATIO_VOCALES_MIN`/`MAX`), resta 8 puntos extra
+  (penaliza candidatos con casi solo consonantes o casi solo vocales, típicos de una clave
+  incorrecta).
+- **Devuelve:** tupla `(puntaje: float, ratio: float)`.
+- **Caso especial:** sin letras, devuelve `(-20.0, 0.0)`.
+- **Quién la usa:** `SF22`.
+
+### SF20 (secuencia de consonantes más larga — auxiliar)
+- **Parámetros:** `palabra` (str).
+- **Ubicación:** `backend/src/analisis_frecuencia.py`.
+- **Qué hace:** recorre la palabra letra por letra llevando la racha actual de consonantes
+  seguidas (se reinicia en cada vocal) y devuelve la racha más larga encontrada.
+- **Quién la usa:** `SF21`.
+
+### SF21 (estructura de palabra)
+- **Parámetros:** `palabras` (list[str]).
+- **Ubicación:** `backend/src/analisis_frecuencia.py`.
+- **Qué hace:** puntúa qué tan "plausibles" son las palabras del candidato como palabras
+  reales: suma un pequeño bono por tener varias palabras (`min(num_palabras, 6) * 0.50`), y
+  penaliza por cada palabra que sea sospechosamente larga (más de
+  `LONGITUD_PALABRA_MAX_RAZONABLE`), que no tenga ninguna vocal, que tenga una racha de 5+
+  consonantes seguidas (`SF20`), o que repita el mismo carácter 4 o más veces seguidas (por
+  ejemplo "aaaa"), algo virtualmente inexistente en español real.
+- **Caso especial:** sin palabras (candidato vacío), devuelve `-15.0`.
+- **Quién la usa:** `SF22`.
+
+### SF22 (puntaje total — el número que decide todo)
+- **Parámetros:** `texto` (str) — un candidato completo de texto descifrado.
+- **Ubicación:** `backend/src/analisis_frecuencia.py`.
+- **Qué hace:** normaliza el texto (`SF8`) y lo separa en palabras (`SF9`); calcula los nueve
+  componentes (`SF13` a `SF21`) y los suma en un único total: `frecuencia + comunes +
+  bigramas + trigramas + tetragramas + prefijos + sufijos + vocales + estructura -
+  penalizacion`.
+- **Devuelve:** `{"total": float, "componentes": {...cada uno por separado, útil para
+  depurar...}, "ratio_vocales": float, "num_palabras": int}`.
+- **Por qué así:** el pedido original era exactamente esto — descifrar con las 26 claves
+  posibles y quedarse con la de **mayor valor**. Al ser una sola suma, `SF7` puede usar
+  `max()` directamente sobre `analisis["total"]` de los 26 candidatos, sin reglas de
+  desempate adicionales.
+- **Quién la usa:** `SF7` (en `descifrado.py`).
 
 ---
 
@@ -318,67 +375,55 @@ sin copiar ningún diccionario externo.
 
 Punto de entrada del *Cloudflare Worker* (Python). Depende del módulo `workers`, propio del
 runtime de Cloudflare, por lo que no se puede importar ni probar fuera de ese entorno; toda la
-lógica de negocio vive en los cuatro archivos anteriores, precisamente para poder probarla de
+lógica de negocio vive en los cinco archivos anteriores, precisamente para poder probarla de
 forma aislada.
 
-### SF14
+### SF23
 - **Parámetros:** ninguno.
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** devuelve el diccionario de cabeceras CORS (`access-control-allow-origin: *`,
-  métodos y headers permitidos) que se agrega a **todas** las respuestas, ya que el frontend
-  (GitHub Pages) y el backend (Cloudflare Workers) viven en dominios distintos.
+- **Qué hace:** devuelve las cabeceras CORS (`access-control-allow-origin: *`, métodos y
+  headers permitidos) que se agregan a **todas** las respuestas, ya que el frontend (GitHub
+  Pages) y el backend (Cloudflare Workers) viven en dominios distintos.
 
-### SF15
-- **Parámetros:** `datos` (dict, serializable a JSON), `estado` (int, código HTTP,
-  por defecto 200).
+### SF24
+- **Parámetros:** `datos` (dict), `estado` (int, por defecto 200).
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** construye la respuesta HTTP final: serializa `datos` a JSON con
-  `ensure_ascii=False` (para que caracteres especiales como chino/árabe/jeroglíficos/acentos
-  viajen tal cual, en UTF-8, y no como secuencias de escape), añade las cabeceras CORS de
-  `SF14` más `content-type: application/json; charset=utf-8`, y arma el objeto `Response` que
-  exige el runtime de Cloudflare.
+- **Qué hace:** construye la respuesta HTTP: serializa `datos` a JSON con
+  `ensure_ascii=False` (para que chino/árabe/jeroglíficos/acentos viajen tal cual, en UTF-8),
+  añade las cabeceras de `SF23` más `content-type: application/json; charset=utf-8`.
 
-### SF16
-- **Parámetros:** `request` (objeto `Request` del runtime de Cloudflare).
-- **Ubicación:** `backend/src/entry.py`. Función asíncrona.
-- **Qué hace:** lee el cuerpo de la petición HTTP como texto (`await request.text()`) y lo
-  interpreta como JSON. Si el cuerpo viene vacío devuelve un diccionario vacío en lugar de
-  fallar.
-
-### SF17
-- **Parámetros:** `payload` (dict) — se espera la clave `alfabeto`.
+### SF25
+- **Parámetros:** `request` (objeto `Request` de Cloudflare). Función asíncrona.
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** implementa la ruta `POST /api/alfabeto/validar`. Llama a `SF1` (de
-  `alfabeto.py`) y traduce el resultado a la forma de respuesta HTTP: `({"valido": True,
-  "longitud": N}, 200)` o `({"valido": False, "error": "..."}, 400)`.
+- **Qué hace:** lee el cuerpo como texto y lo interpreta como JSON; si viene vacío, devuelve
+  un diccionario vacío.
 
-### SF18
-- **Parámetros:** `payload` (dict) — espera `alfabeto`, `metodo` ("CESAR"|"ATBASH"), `texto`
-  y, si el método es César, `desplazamiento`.
+### SF26
+- **Parámetros:** `payload` (dict, espera `alfabeto`).
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** implementa la ruta `POST /api/cifrar`. Valida el alfabeto (`SF1`) y el texto,
-  y según el método invoca `SF5` (Atbash, de `cifrado.py`) o `SF4` (César, de `cifrado.py`,
-  validando además que el desplazamiento sea un entero entre 1 y 25). Es el único lugar del
-  sistema donde el usuario elige explícitamente el método/módulo de cifrado, tal como exige
-  el enunciado.
+- **Qué hace:** implementa `POST /api/alfabeto/validar` llamando a `SF1`.
 
-### SF19
-- **Parámetros:** `payload` (dict) — espera `alfabeto` y `texto` (el texto cifrado).
+### SF27
+- **Parámetros:** `payload` (dict, espera `alfabeto`, `metodo`, `texto`, y
+  `desplazamiento` si el método es César).
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** implementa la ruta `POST /api/descifrar`. Valida el alfabeto y el texto, y
-  delega toda la decisión a `SF7` (de `descifrado.py`, motor de autodetección de Al-Kindi).
-  Devuelve el método detectado, el desplazamiento (o `None` si fue Atbash) y el texto
-  resultante. El usuario no interviene en ningún punto de esta función.
+- **Qué hace:** implementa `POST /api/cifrar`: valida con `SF1`, invoca `SF5` (Atbash) o `SF4`
+  (César, validando el desplazamiento). Único lugar donde el usuario elige el método de
+  cifrado, tal como exige el enunciado.
+
+### SF28
+- **Parámetros:** `payload` (dict, espera `alfabeto` y `texto`).
+- **Ubicación:** `backend/src/entry.py`.
+- **Qué hace:** implementa `POST /api/descifrar`: valida con `SF1` y delega toda la decisión
+  a `SF7`. El usuario no interviene en ningún punto.
 
 ### `on_fetch` (nombre reservado, no forma parte de la numeración SF)
-- **Parámetros:** `request`, `env`, `ctx` (firma exigida por el runtime de Cloudflare
-  Workers; el nombre `on_fetch` es obligatorio y no puede renombrarse sin romper el
-  despliegue).
+- **Parámetros:** `request`, `env`, `ctx` (firma exigida por Cloudflare; el nombre es
+  obligatorio).
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** único punto de entrada HTTP del Worker. Responde `204` con cabeceras CORS
-  ante peticiones `OPTIONS` (pre-flight del navegador); enruta `POST /api/alfabeto/validar`
-  a `SF17`, `POST /api/cifrar` a `SF18` y `POST /api/descifrar` a `SF19`; cualquier otra
-  ruta/método devuelve `404` mediante `SF15`.
+- **Qué hace:** único punto de entrada HTTP. Responde `204` a `OPTIONS` (pre-flight CORS);
+  enruta `POST /api/alfabeto/validar` a `SF26`, `POST /api/cifrar` a `SF27` y
+  `POST /api/descifrar` a `SF28`; cualquier otra ruta devuelve `404`.
 
 ---
 
@@ -387,85 +432,60 @@ forma aislada.
 Lógica de interfaz. Consume la API del backend mediante `fetch`. No contiene lógica
 criptográfica: todo el cifrado/descifrado/autodetección ocurre en el backend.
 
-### `URL_API_BASE` (constante, no es función)
-Dirección base del backend. Si la página se abre desde `localhost`/`127.0.0.1` (pruebas
-locales) apunta automáticamente a `http://127.0.0.1:8787`; en cualquier otro dominio (por
-ejemplo GitHub Pages) usa la URL de producción del Worker de Cloudflare, que debe
-reemplazarse una vez desplegado (ver `README.md`).
+### `URL_API_BASE` (constante)
+Si la página se abre desde `localhost`/`127.0.0.1` usa `http://127.0.0.1:8787`; en cualquier
+otro dominio usa la URL de producción del Worker (reemplazar tras desplegar, ver `README.md`).
 
-### `LIMITE_ALFABETO` (constante, no es función)
-Copia en el frontend del mismo número (`256`) que `alfabeto.py` usa en el backend
-(`LIMITE_ALFABETO`). Se usa en `SF27` para el contador en vivo y coincide con el atributo
-`maxlength="256"` del campo de alfabeto en `front/index.html`, de modo que el límite es
-idéntico y visible en ambos lados.
+### `LIMITE_ALFABETO` (constante)
+Copia en el frontend del mismo `256` que usa `alfabeto.py`, para el contador en vivo (`SF36`).
 
-### SF20
-- **Parámetros:** `ruta` (str, p. ej. `/api/cifrar`), `cuerpo` (objeto JS a serializar como
-  JSON).
-- **Ubicación:** `front/main.js`. Función asíncrona.
-- **Qué hace:** helper genérico de comunicación con el backend: hace `fetch` con método
-  `POST`, cabecera `content-type: application/json` y el `cuerpo` serializado; si la
-  respuesta HTTP no es exitosa, lanza un `Error` con el mensaje que venga en `datos.error`.
+### SF29
+- **Parámetros:** `ruta` (str), `cuerpo` (objeto JS). Función asíncrona.
+- **Ubicación:** `front/main.js`.
+- **Qué hace:** helper de `fetch` con método POST y JSON; lanza `Error` si la respuesta no es
+  exitosa.
 
-### SF21
+### SF30
 - **Parámetros:** `mensaje` (str), `esError` (bool).
 - **Ubicación:** `front/main.js`.
-- **Qué hace:** actualiza los elementos `#alphabet-error` y `#alphabet-status` del DOM según
-  si el mensaje es un error o una confirmación.
+- **Qué hace:** actualiza `#alphabet-error`/`#alphabet-status`.
 
-### SF22
-- **Parámetros:** `evento` (evento `submit` del formulario `#alphabet-form`).
-- **Ubicación:** `front/main.js`. Función asíncrona.
-- **Qué hace:** maneja el envío del formulario de alfabeto: evita el envío nativo del
-  formulario, llama a `SF20` contra `/api/alfabeto/validar`, y si es válido guarda el
-  alfabeto en la variable de módulo `SFEstadoAlfabeto` y en `localStorage` (para sobrevivir a
-  recargas de página), y muestra confirmación con `SF21`. Este alfabeto "aplicado" es el que
-  se usará tanto para cifrar como para descifrar.
-
-### SF23
-- **Parámetros:** `evento` (evento `submit` del formulario `#encrypt-form`).
-- **Ubicación:** `front/main.js`. Función asíncrona.
-- **Qué hace:** maneja el cifrado explícito. Exige que ya exista un alfabeto aplicado; lee el
-  método elegido (`#encrypt-method`) y el texto (`#encrypt-text`); si el método es César
-  añade el desplazamiento (`#encrypt-shift`); llama a `SF20` contra `/api/cifrar` y muestra
-  el resultado en `#encrypt-result`.
-
-### SF24
-- **Parámetros:** `evento` (evento `submit` del formulario `#decrypt-form`).
-- **Ubicación:** `front/main.js`. Función asíncrona.
-- **Qué hace:** maneja el descifrado automático. Exige que ya exista un alfabeto aplicado;
-  envía el texto cifrado a `/api/descifrar` (sin que el usuario indique método ni
-  desplazamiento) y muestra el método detectado, el desplazamiento (o "No aplica" si fue
-  Atbash) y el texto descifrado — la única línea que el sistema considera correcta.
-
-### SF25
-- **Parámetros:** `idOrigen` (str, id de un elemento del DOM cuyo `textContent` se quiere
-  copiar).
+### SF31
+- **Parámetros:** `evento` (submit de `#alphabet-form`). Función asíncrona.
 - **Ubicación:** `front/main.js`.
-- **Qué hace:** copia al portapapeles el contenido del elemento indicado, usado por los
-  botones "Copiar al portapapeles" de ambas secciones.
+- **Qué hace:** valida el alfabeto contra el backend (`SF29`), lo guarda en
+  `SFEstadoAlfabeto` y `localStorage` si es válido.
 
-### SF26
+### SF32
+- **Parámetros:** `evento` (submit de `#encrypt-form`). Función asíncrona.
+- **Ubicación:** `front/main.js`.
+- **Qué hace:** cifra el texto con el método/desplazamiento elegidos, vía `SF29`.
+
+### SF33
+- **Parámetros:** `evento` (submit de `#decrypt-form`). Función asíncrona.
+- **Ubicación:** `front/main.js`.
+- **Qué hace:** envía el texto cifrado a `/api/descifrar` (sin indicar método) y muestra el
+  resultado detectado automáticamente.
+
+### SF34
+- **Parámetros:** `idOrigen` (str).
+- **Ubicación:** `front/main.js`.
+- **Qué hace:** copia al portapapeles el contenido de un elemento del DOM.
+
+### SF35
 - **Parámetros:** ninguno.
 - **Ubicación:** `front/main.js`.
-- **Qué hace:** conecta el comportamiento del selector de método de cifrado (muestra/oculta
-  el campo de desplazamiento según si el método es César o Atbash) y de los botones ▲/▼ del
-  stepper de desplazamiento, respetando siempre el límite 1-25 (igual que `DESPLAZAMIENTO_MIN`
-  / `DESPLAZAMIENTO_MAX` del backend).
+- **Qué hace:** muestra/oculta el campo de desplazamiento según el método elegido, y conecta
+  los botones ▲/▼ del stepper (límite 1-25).
 
-### SF27
+### SF36
 - **Parámetros:** ninguno.
 - **Ubicación:** `front/main.js`.
-- **Qué hace:** conecta el contador en vivo "`X / 256 caracteres`" bajo el campo de alfabeto:
-  en cada tecla pulsada, actualiza el conteo y pinta el número en rojo (usando la variable de
-  color `--error` del CSS existente) si se supera `LIMITE_ALFABETO`, para que el límite del
-  backend sea visible en el frontend antes de enviar el formulario.
+- **Qué hace:** contador en vivo "`X / 256 caracteres`" bajo el campo de alfabeto; lo pinta en
+  rojo (`var(--error)`) si se supera `LIMITE_ALFABETO`.
 
-### SF28
+### SF37
 - **Parámetros:** ninguno.
 - **Ubicación:** `front/main.js`.
-- **Qué hace:** función de arranque, ejecutada en `DOMContentLoaded`. Restaura el alfabeto
-  guardado en `localStorage` (si existe), y registra todos los manejadores de eventos:
-  `SF22` en el formulario de alfabeto, `SF23` en el de cifrado, `SF24` en el de descifrado,
-  `SF25` en ambos botones de copiar, y llama a `SF26` y `SF27` para inicializar el stepper y
-  el contador de caracteres.
+- **Qué hace:** arranque en `DOMContentLoaded`: restaura el alfabeto de `localStorage`, y
+  registra `SF31`-`SF34` como manejadores de eventos, más `SF35` y `SF36`.
