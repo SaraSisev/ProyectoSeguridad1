@@ -52,7 +52,7 @@ encuentran en la lectura un refugio sencillo pero muy valioso para
 descansar la mente y el corazón.
 """
 
-PALABRAS_COMUNES = {
+PALABRAS_BASE = {
     "DE", "LA", "QUE", "EL", "EN", "Y", "A", "LOS", "DEL", "SE", "LAS", "POR",
     "UN", "PARA", "CON", "NO", "UNA", "SU", "AL", "LO", "COMO", "MAS", "PERO",
     "SUS", "LE", "YA", "O", "ESTE", "SI", "PORQUE", "ESTA", "ENTRE", "CUANDO",
@@ -93,27 +93,7 @@ def SF9(texto):
     return conteo, total
 
 
-_CONTEO_CORPUS, _TOTAL_CORPUS = SF9(CORPUS_REFERENCIA)
-FREC_ESPANOL = {
-    letra: (veces / _TOTAL_CORPUS) * 100
-    for letra, veces in _CONTEO_CORPUS.items()
-}
-
-
 def SF10(texto):
-    conteo, total = SF9(texto)
-    if total == 0:
-        return float("inf")
-    chi_cuadrado = 0.0
-    for letra, frecuencia_esperada in FREC_ESPANOL.items():
-        esperado = total * (frecuencia_esperada / 100)
-        observado = conteo[letra]
-        if esperado > 0:
-            chi_cuadrado += ((observado - esperado) ** 2) / esperado
-    return chi_cuadrado
-
-
-def SF11(texto):
     limpio = SF8(texto).upper()
     palabras = []
     actual = []
@@ -126,7 +106,32 @@ def SF11(texto):
                 actual = []
     if actual:
         palabras.append("".join(actual))
+    return palabras
+
+
+_CONTEO_CORPUS, _TOTAL_CORPUS = SF9(CORPUS_REFERENCIA)
+FREC_ESPANOL = {
+    letra: (veces / _TOTAL_CORPUS) * 100
+    for letra, veces in _CONTEO_CORPUS.items()
+}
+
+DICCIONARIO = PALABRAS_BASE | set(SF10(CORPUS_REFERENCIA))
+
+
+def SF11(texto):
+    conteo, total = SF9(texto)
+    if total == 0:
+        return 0.0
+    return sum(FREC_ESPANOL[letra] * veces for letra, veces in conteo.items()) / total
+
+
+def SF12(texto):
+    palabras = SF10(texto)
     return sum(
         len(palabra) for palabra in palabras
-        if len(palabra) >= 2 and palabra in PALABRAS_COMUNES
+        if len(palabra) >= 2 and palabra in DICCIONARIO
     )
+
+
+def SF13(texto):
+    return SF11(texto) + SF12(texto)

@@ -7,7 +7,7 @@ from cifrado import SF4, SF5
 from descifrado import SF7
 
 
-def SF12():
+def SF14():
     return {
         "access-control-allow-origin": "*",
         "access-control-allow-methods": "GET, POST, OPTIONS",
@@ -15,20 +15,20 @@ def SF12():
     }
 
 
-def SF13(datos, estado=200):
-    encabezados = SF12()
+def SF15(datos, estado=200):
+    encabezados = SF14()
     encabezados["content-type"] = "application/json; charset=utf-8"
     return Response(json.dumps(datos, ensure_ascii=False), status=estado, headers=encabezados)
 
 
-async def SF14(request):
+async def SF16(request):
     crudo = await request.text()
     if not crudo:
         return {}
     return json.loads(crudo)
 
 
-def SF15(payload):
+def SF17(payload):
     alfabeto = payload.get("alfabeto", "")
     valido, error = SF1(alfabeto)
     if not valido:
@@ -36,7 +36,7 @@ def SF15(payload):
     return {"valido": True, "longitud": len(alfabeto)}, 200
 
 
-def SF16(payload):
+def SF18(payload):
     alfabeto = payload.get("alfabeto", "")
     metodo = payload.get("metodo", "")
     texto = payload.get("texto", "")
@@ -65,7 +65,7 @@ def SF16(payload):
     return {"error": "Método de cifrado no reconocido."}, 400
 
 
-def SF17(payload):
+def SF19(payload):
     alfabeto = payload.get("alfabeto", "")
     texto = payload.get("texto", "")
 
@@ -85,23 +85,23 @@ def SF17(payload):
 
 async def on_fetch(request, env, ctx):
     if request.method == "OPTIONS":
-        return Response(None, status=204, headers=SF12())
+        return Response(None, status=204, headers=SF14())
 
     ruta = request.url.split("?")[0].rstrip("/")
 
     if request.method == "POST" and ruta.endswith("/api/alfabeto/validar"):
-        payload = await SF14(request)
-        datos, estado = SF15(payload)
-        return SF13(datos, estado)
+        payload = await SF16(request)
+        datos, estado = SF17(payload)
+        return SF15(datos, estado)
 
     if request.method == "POST" and ruta.endswith("/api/cifrar"):
-        payload = await SF14(request)
-        datos, estado = SF16(payload)
-        return SF13(datos, estado)
+        payload = await SF16(request)
+        datos, estado = SF18(payload)
+        return SF15(datos, estado)
 
     if request.method == "POST" and ruta.endswith("/api/descifrar"):
-        payload = await SF14(request)
-        datos, estado = SF17(payload)
-        return SF13(datos, estado)
+        payload = await SF16(request)
+        datos, estado = SF19(payload)
+        return SF15(datos, estado)
 
-    return SF13({"error": "Ruta no encontrada."}, 404)
+    return SF15({"error": "Ruta no encontrada."}, 404)
