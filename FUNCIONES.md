@@ -87,6 +87,10 @@ confiable) se determinan con pruebas de escritorio sobre el sistema ya desplegad
 ### Constantes
 - `LIMITE_ALFABETO = 256`: máximo de caracteres distintos del alfabeto. El frontend usa el
   mismo número (`LIMITE_ALFABETO` en `main.js`, `maxlength="256"` en el HTML).
+- `LIMITE_TEXTO = 10000`: máximo de caracteres del texto a cifrar/descifrar. Se definió
+  midiendo el tiempo real de análisis (ver `PRUEBAS_Y_LIMITACIONES.md`): 10 000 caracteres se
+  procesan en medio segundo aproximadamente. Se valida en `entry.py` (`SF25`, `SF26`) y el
+  frontend usa el mismo número como `maxlength="10000"` en ambos campos de texto.
 - `DESPLAZAMIENTO_MIN = 1`, `DESPLAZAMIENTO_MAX = 25`: rango del desplazamiento César, igual
   que los atributos `min`/`max` del campo de desplazamiento en `front/index.html`.
 
@@ -324,33 +328,56 @@ aislada.
 - **Ubicación:** `backend/src/entry.py`.
 - **Qué hace:** lee el cuerpo como texto y lo interpreta como JSON; si viene vacío, devuelve
   un diccionario vacío.
+- **Manejo de errores (agregado tras las pruebas reales, ver `PRUEBAS_Y_LIMITACIONES.md`):**
+  si el cuerpo no es JSON válido, o es JSON válido pero no es un objeto (por ejemplo un
+  arreglo), devuelve `None` en vez de dejar que `json.JSONDecodeError` o un `AttributeError`
+  posterior se propaguen sin control. Antes de este cambio, una solicitud mal formada
+  provocaba un error 500 que exponía el traceback interno del servidor al cliente.
+- **Quién revisa el resultado:** `on_fetch`, que responde `400` con un mensaje claro si
+  `SF23` devuelve `None`, antes de intentar enrutar la solicitud.
 
 ### SF24
 - **Parámetros:** `payload` (dict, espera `alfabeto`).
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** implementa `POST /api/alfabeto/validar` llamando a `SF1`.
+- **Qué hace:** implementa `POST /api/alfabeto/validar`. Normaliza el alfabeto a la forma
+  Unicode NFC (`unicodedata.normalize("NFC", ...)`) antes de validarlo con `SF1` — ver la nota
+  sobre normalización Unicode más abajo.
 
 ### SF25
 - **Parámetros:** `payload` (dict, espera `alfabeto`, `metodo`, `texto`, y
   `desplazamiento` si el método es César).
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** implementa `POST /api/cifrar`: valida con `SF1`, invoca `SF5` (Atbash) o `SF4`
-  (César, validando el desplazamiento). Único lugar donde el usuario elige el método de
-  cifrado.
+- **Qué hace:** implementa `POST /api/cifrar`: normaliza alfabeto y texto a NFC, valida con
+  `SF1`, verifica que el texto no esté vacío ni supere `LIMITE_TEXTO`, e invoca `SF5` (Atbash)
+  o `SF4` (César, validando el desplazamiento). Único lugar donde el usuario elige el método
+  de cifrado.
 
 ### SF26
 - **Parámetros:** `payload` (dict, espera `alfabeto` y `texto`).
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** implementa `POST /api/descifrar`: valida con `SF1` y delega toda la decisión
-  a `SF20` (en `analizador.py`). Devuelve método, desplazamiento y texto. El usuario no
-  interviene en ningún punto.
+- **Qué hace:** implementa `POST /api/descifrar`: normaliza alfabeto y texto a NFC, valida con
+  `SF1`, verifica el límite de longitud del texto, y delega toda la decisión a `SF20` (en
+  `analizador.py`). Devuelve método, desplazamiento y texto. El usuario no interviene en
+  ningún punto.
+
+### Normalización Unicode (NFC) — corrección encontrada en pruebas reales
+`SF24`, `SF25` y `SF26` normalizan el alfabeto (y el texto) a la forma Unicode NFC apenas se
+reciben del cuerpo de la solicitud, usando el módulo estándar `unicodedata`. Esto corrige una
+inconsistencia real: un mismo alfabeto "visualmente idéntico" puede representarse con distinta
+cantidad de puntos de código Unicode según cómo se haya escrito o copiado (por ejemplo, una
+"É" como un solo carácter precompuesto, o como una "E" seguida de un acento combinado por
+separado); sin normalizar, esas dos representaciones tienen distinta longitud interna y
+producen resultados de cifrado/descifrado distintos aunque el usuario las vea como "el mismo"
+alfabeto. El detalle completo de cómo se encontró y verificó esta corrección está en
+`PRUEBAS_Y_LIMITACIONES.md`.
 
 ### `on_fetch` (nombre reservado, no forma parte de la numeración SF)
 - **Parámetros:** `request`, `env`, `ctx` (firma exigida por Cloudflare; el nombre es
   obligatorio).
 - **Ubicación:** `backend/src/entry.py`.
-- **Qué hace:** único punto de entrada HTTP. Responde `204` a `OPTIONS`; enruta
-  `POST /api/alfabeto/validar` a `SF24`, `POST /api/cifrar` a `SF25` y
+- **Qué hace:** único punto de entrada HTTP. Responde `204` a `OPTIONS`; si `SF23` no pudo
+  interpretar el cuerpo como un objeto JSON, responde `400` de inmediato; en caso contrario
+  enruta `POST /api/alfabeto/validar` a `SF24`, `POST /api/cifrar` a `SF25` y
   `POST /api/descifrar` a `SF26`; cualquier otra ruta devuelve `404`.
 
 ---

@@ -6,7 +6,8 @@ Atbash, y descifrar de forma **automática** (sin que el usuario elija el métod
 análisis de frecuencias en español al estilo de Al-Kindi.
 
 Ver [`FUNCIONES.md`](FUNCIONES.md) para la documentación técnica función por función
-(identificadores `SFx`).
+(identificadores `SFx`), y [`PRUEBAS_Y_LIMITACIONES.md`](PRUEBAS_Y_LIMITACIONES.md) para las
+restricciones, limitaciones y resultados de las pruebas reales realizadas sobre el sistema.
 
 ## Estructura
 
@@ -84,4 +85,8 @@ Si en el futuro rehaces el Worker con otro nombre/subdominio, recuerda actualiza
   (se "pasan por alto"), tanto al cifrar como al descifrar.
 - El backend es Unicode-aware: el alfabeto puede incluir letras latinas, dígitos, signos de
   puntuación, o símbolos de cualquier otro alfabeto/idioma (árabe, chino, etc.), cada uno
-  contando como un solo carácter del conjunto, sin importar cuántos bytes ocupe en UTF-8.
+  contando como un solo carácter del conjunto, sin importar cuántos bytes ocupe en UTF-8. El
+  alfabeto y el texto se normalizan a la forma Unicode NFC al llegar a la API, para evitar
+  inconsistencias cuando el "mismo" carácter se escribe con distinta representación interna.
+- El texto a cifrar/descifrar tiene un límite de 10 000 caracteres (definido tras medir el
+  rendimiento real, ver `PRUEBAS_Y_LIMITACIONES.md`).

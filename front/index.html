@@ -61,7 +61,7 @@
       </div>
 
         <label for="encrypt-text">Texto a cifrar:</label>
-        <textarea id="encrypt-text" rows="4"></textarea>
+        <textarea id="encrypt-text" rows="4" maxlength="10000"></textarea>
 
         <button type="submit">Cifrar</button>
         <p class="error" id="encrypt-error"></p>
@@ -82,7 +82,7 @@
 
       <form id="decrypt-form">
         <label for="decrypt-text">Texto cifrado:</label>
-        <textarea id="decrypt-text" rows="4"></textarea>
+        <textarea id="decrypt-text" rows="4" maxlength="10000"></textarea>
         <button type="submit">Descifrar</button>
         <p class="error" id="decrypt-error"></p>
       </form>
