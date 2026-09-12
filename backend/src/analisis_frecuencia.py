@@ -182,4 +182,5 @@ def SF22(texto):
         },
         "ratio_vocales": ratio_vocales,
         "num_palabras": len(palabras),
+        "num_letras": sum(1 for c in normalizado if c in LETRAS_ESPANOL),
     }
