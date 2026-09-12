@@ -13,6 +13,12 @@ Ver [`FUNCIONES.md`](FUNCIONES.md) para la documentación técnica función por 
 ```
 front/    -> sitio estático (HTML/CSS/JS), se publica en GitHub Pages
 backend/  -> Cloudflare Worker en Python (beta "Python Workers"), se publica en Cloudflare
+  src/
+    alfabeto.py             -> validación del alfabeto y utilidades de índices/desplazamiento
+    cifrado.py               -> cifrado César y Atbash
+    descifrado.py            -> César inverso + autodetección automática (Atbash o César)
+    analisis_frecuencia.py   -> motor de Al-Kindi (corpus propio, frecuencias, puntuación)
+    entry.py                 -> punto de entrada del Worker (rutas HTTP, CORS)
 ```
 
 ## Backend — Cloudflare Workers (Python)
@@ -36,8 +42,19 @@ Para probar en local antes de desplegar:
 
 ```bash
 cd backend
-wrangler dev
+wrangler dev --local --port 8787
 ```
+
+Y en otra terminal, sirve el frontend en local:
+
+```bash
+cd front
+python -m http.server 5500
+```
+
+`front/main.js` detecta automáticamente cuando la página se abre desde `localhost` o
+`127.0.0.1` y en ese caso usa `http://127.0.0.1:8787` como backend, sin necesidad de editar
+nada. Abre `http://127.0.0.1:5500` en el navegador para probar todo el flujo completo.
 
 Endpoints expuestos (todos `POST`, cuerpo y respuesta en JSON, con CORS abierto):
 

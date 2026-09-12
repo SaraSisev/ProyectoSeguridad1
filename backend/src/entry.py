@@ -2,17 +2,12 @@ import json
 
 from workers import Response
 
-from logic import (
-    SF1,
-    SF4,
-    SF6,
-    SF10,
-    DESPLAZAMIENTO_MIN,
-    DESPLAZAMIENTO_MAX,
-)
+from alfabeto import SF1, DESPLAZAMIENTO_MIN, DESPLAZAMIENTO_MAX
+from cifrado import SF4, SF5
+from descifrado import SF7
 
 
-def SF11():
+def SF12():
     return {
         "access-control-allow-origin": "*",
         "access-control-allow-methods": "GET, POST, OPTIONS",
@@ -20,20 +15,20 @@ def SF11():
     }
 
 
-def SF12(datos, estado=200):
-    encabezados = SF11()
+def SF13(datos, estado=200):
+    encabezados = SF12()
     encabezados["content-type"] = "application/json; charset=utf-8"
     return Response(json.dumps(datos, ensure_ascii=False), status=estado, headers=encabezados)
 
 
-async def SF13(request):
+async def SF14(request):
     crudo = await request.text()
     if not crudo:
         return {}
     return json.loads(crudo)
 
 
-def SF14(payload):
+def SF15(payload):
     alfabeto = payload.get("alfabeto", "")
     valido, error = SF1(alfabeto)
     if not valido:
@@ -41,7 +36,7 @@ def SF14(payload):
     return {"valido": True, "longitud": len(alfabeto)}, 200
 
 
-def SF15(payload):
+def SF16(payload):
     alfabeto = payload.get("alfabeto", "")
     metodo = payload.get("metodo", "")
     texto = payload.get("texto", "")
@@ -53,7 +48,7 @@ def SF15(payload):
         return {"error": "El texto a cifrar no puede estar vacío."}, 400
 
     if metodo == "ATBASH":
-        resultado = SF6(texto, alfabeto)
+        resultado = SF5(texto, alfabeto)
         return {"metodo": "ATBASH", "desplazamiento": None, "resultado": resultado}, 200
 
     if metodo == "CESAR":
@@ -70,7 +65,7 @@ def SF15(payload):
     return {"error": "Método de cifrado no reconocido."}, 400
 
 
-def SF16(payload):
+def SF17(payload):
     alfabeto = payload.get("alfabeto", "")
     texto = payload.get("texto", "")
 
@@ -80,7 +75,7 @@ def SF16(payload):
     if not isinstance(texto, str) or texto == "":
         return {"error": "El texto a descifrar no puede estar vacío."}, 400
 
-    mejor = SF10(texto, alfabeto)
+    mejor = SF7(texto, alfabeto)
     return {
         "metodo": mejor["metodo"],
         "desplazamiento": mejor["desplazamiento"],
@@ -90,23 +85,23 @@ def SF16(payload):
 
 async def on_fetch(request, env, ctx):
     if request.method == "OPTIONS":
-        return Response(None, status=204, headers=SF11())
+        return Response(None, status=204, headers=SF12())
 
     ruta = request.url.split("?")[0].rstrip("/")
 
     if request.method == "POST" and ruta.endswith("/api/alfabeto/validar"):
-        payload = await SF13(request)
-        datos, estado = SF14(payload)
-        return SF12(datos, estado)
+        payload = await SF14(request)
+        datos, estado = SF15(payload)
+        return SF13(datos, estado)
 
     if request.method == "POST" and ruta.endswith("/api/cifrar"):
-        payload = await SF13(request)
-        datos, estado = SF15(payload)
-        return SF12(datos, estado)
+        payload = await SF14(request)
+        datos, estado = SF16(payload)
+        return SF13(datos, estado)
 
     if request.method == "POST" and ruta.endswith("/api/descifrar"):
-        payload = await SF13(request)
-        datos, estado = SF16(payload)
-        return SF12(datos, estado)
+        payload = await SF14(request)
+        datos, estado = SF17(payload)
+        return SF13(datos, estado)
 
-    return SF12({"error": "Ruta no encontrada."}, 404)
+    return SF13({"error": "Ruta no encontrada."}, 404)
