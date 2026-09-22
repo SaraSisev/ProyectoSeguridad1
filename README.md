@@ -1,6 +1,6 @@
 # Sistema de Cifrado y Descifrado — César / Atbash
 
-Proyecto académico de Seguridad. Permite definir un alfabeto propio (hasta 256 caracteres,
+Proyecto académico de Seguridad. Permite definir un alfabeto propio (hasta 1000 caracteres,
 incluyendo símbolos especiales de cualquier idioma o codificación), cifrar con César o
 Atbash, y descifrar de forma **automática** (sin que el usuario elija el método), usando
 análisis de frecuencias en español al estilo de Al-Kindi.
@@ -12,7 +12,7 @@ restricciones, limitaciones y resultados de las pruebas reales realizadas sobre 
 ## Estructura
 
 ```
-front/    -> sitio estático (HTML/CSS/JS), se publica en GitHub Pages
+frontend/    -> sitio estático (HTML/CSS/JS), se publica en GitHub Pages
 backend/  -> Cloudflare Worker en Python (beta "Python Workers"), se publica en Cloudflare
   src/
     alfabeto.py             -> validación del alfabeto y utilidades de índices/desplazamiento
@@ -50,11 +50,11 @@ wrangler dev --local --port 8787
 Y en otra terminal, sirve el frontend en local:
 
 ```bash
-cd front
+cd frontend
 python -m http.server 5500
 ```
 
-`front/main.js` detecta automáticamente cuando la página se abre desde `localhost` o
+`frontend/main.js` detecta automáticamente cuando la página se abre desde `localhost` o
 `127.0.0.1` y en ese caso usa `http://127.0.0.1:8787` como backend, sin necesidad de editar
 nada. Abre `http://127.0.0.1:5500` en el navegador para probar todo el flujo completo.
 
@@ -66,16 +66,16 @@ Endpoints expuestos (todos `POST`, cuerpo y respuesta en JSON, con CORS abierto)
 
 ## Frontend — GitHub Pages
 
-`front/main.js` ya apunta a la URL real del backend desplegado, así que no hay que editar
+`frontend/main.js` ya apunta a la URL real del backend desplegado, así que no hay que editar
 nada más:
 
-1. Sube la carpeta `front/` a un repositorio de GitHub y activa GitHub Pages apuntando a esa
-   carpeta (Settings → Pages → Deploy from a branch → carpeta `/front`, o mueve su contenido
+1. Sube la carpeta `frontend/` a un repositorio de GitHub y activa GitHub Pages apuntando a esa
+   carpeta (Settings → Pages → Deploy from a branch → carpeta `/frontend`, o mueve su contenido
    a la raíz del repo si prefieres servir desde `/`).
 2. GitHub Pages publicará `index.html` en `https://<usuario>.github.io/<repositorio>/`.
 
 Si en el futuro rehaces el Worker con otro nombre/subdominio, recuerda actualizar
-`URL_API_BASE` en [`front/main.js`](front/main.js).
+`URL_API_BASE` en [`frontend/main.js`](frontend/main.js).
 
 ## Notas de diseño
 

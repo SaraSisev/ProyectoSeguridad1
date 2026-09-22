@@ -1,7 +1,7 @@
 # Documentación de funciones (identificadores SF)
 
 Este documento es la única fuente de explicación del comportamiento interno del sistema.
-En el código fuente del backend (`backend/src/*.py`) y del frontend (`front/main.js`) las
+En el código fuente del backend (`backend/src/*.py`) y del frontend (`frontend/main.js`) las
 funciones no llevan comentarios descriptivos: cada una está identificada únicamente con un
 código `SFx`, **único en todo el proyecto** (no se repite entre archivos). Este documento
 describe, para cada identificador, qué hace, qué parámetros recibe, dónde está ubicado y cómo
@@ -85,19 +85,19 @@ confiable) se determinan con pruebas de escritorio sobre el sistema ya desplegad
 ## `backend/src/alfabeto.py`
 
 ### Constantes
-- `LIMITE_ALFABETO = 256`: máximo de caracteres distintos del alfabeto. El frontend usa el
-  mismo número (`LIMITE_ALFABETO` en `main.js`, `maxlength="256"` en el HTML).
+- `LIMITE_ALFABETO = 1000`: máximo de caracteres distintos del alfabeto. El frontend usa el
+  mismo número (`LIMITE_ALFABETO` en `main.js`, `maxlength="1000"` en el HTML).
 - `LIMITE_TEXTO = 10000`: máximo de caracteres del texto a cifrar/descifrar. Se definió
   midiendo el tiempo real de análisis (ver `PRUEBAS_Y_LIMITACIONES.md`): 10 000 caracteres se
   procesan en medio segundo aproximadamente. Se valida en `entry.py` (`SF25`, `SF26`) y el
   frontend usa el mismo número como `maxlength="10000"` en ambos campos de texto.
 - `DESPLAZAMIENTO_MIN = 1`, `DESPLAZAMIENTO_MAX = 25`: rango del desplazamiento César, igual
-  que los atributos `min`/`max` del campo de desplazamiento en `front/index.html`.
+  que los atributos `min`/`max` del campo de desplazamiento en `frontend/index.html`.
 
 ### SF1
 - **Parámetros:** `alfabeto` (str).
 - **Ubicación:** `backend/src/alfabeto.py`.
-- **Qué hace:** valida que el alfabeto sea utilizable: cadena no vacía, máximo 256
+- **Qué hace:** valida que el alfabeto sea utilizable: cadena no vacía, máximo 1000
   caracteres, sin repetidos, al menos 2 caracteres distintos.
 - **Cómo lo hace:** convierte la cadena en lista de caracteres Unicode (cada carácter, sea
   ASCII, chino, árabe, un jeroglífico, etc., cuenta como un solo elemento porque Python 3
@@ -382,7 +382,7 @@ alfabeto. El detalle completo de cómo se encontró y verificó esta corrección
 
 ---
 
-## `front/main.js`
+## `frontend/main.js`
 
 Lógica de interfaz. Consume la API del backend mediante `fetch`. No contiene lógica
 criptográfica: todo el cifrado/descifrado/autodetección ocurre en el backend.
@@ -392,55 +392,55 @@ Si la página se abre desde `localhost`/`127.0.0.1` usa `http://127.0.0.1:8787`;
 otro dominio usa la URL de producción del Worker (reemplazar tras desplegar, ver `README.md`).
 
 ### `LIMITE_ALFABETO` (constante)
-Copia en el frontend del mismo `256` que usa `alfabeto.py`, para el contador en vivo (`SF34`).
+Copia en el frontend del mismo `1000` que usa `alfabeto.py`, para el contador en vivo (`SF34`).
 
 ### SF27
 - **Parámetros:** `ruta` (str), `cuerpo` (objeto JS). Función asíncrona.
-- **Ubicación:** `front/main.js`.
+- **Ubicación:** `frontend/main.js`.
 - **Qué hace:** helper de `fetch` con método POST y JSON; lanza `Error` si la respuesta no es
   exitosa.
 
 ### SF28
 - **Parámetros:** `mensaje` (str), `esError` (bool).
-- **Ubicación:** `front/main.js`.
+- **Ubicación:** `frontend/main.js`.
 - **Qué hace:** actualiza `#alphabet-error`/`#alphabet-status`.
 
 ### SF29
 - **Parámetros:** `evento` (submit de `#alphabet-form`). Función asíncrona.
-- **Ubicación:** `front/main.js`.
+- **Ubicación:** `frontend/main.js`.
 - **Qué hace:** valida el alfabeto contra el backend (`SF27`), lo guarda en
   `SFEstadoAlfabeto` y `localStorage` si es válido.
 
 ### SF30
 - **Parámetros:** `evento` (submit de `#encrypt-form`). Función asíncrona.
-- **Ubicación:** `front/main.js`.
+- **Ubicación:** `frontend/main.js`.
 - **Qué hace:** cifra el texto con el método/desplazamiento elegidos, vía `SF27`.
 
 ### SF31
 - **Parámetros:** `evento` (submit de `#decrypt-form`). Función asíncrona.
-- **Ubicación:** `front/main.js`.
+- **Ubicación:** `frontend/main.js`.
 - **Qué hace:** envía el texto cifrado a `/api/descifrar` (sin indicar método) y muestra el
   método, desplazamiento y el texto descifrado detectados automáticamente.
 
 ### SF32
 - **Parámetros:** `idOrigen` (str).
-- **Ubicación:** `front/main.js`.
+- **Ubicación:** `frontend/main.js`.
 - **Qué hace:** copia al portapapeles el contenido de un elemento del DOM.
 
 ### SF33
 - **Parámetros:** ninguno.
-- **Ubicación:** `front/main.js`.
+- **Ubicación:** `frontend/main.js`.
 - **Qué hace:** muestra/oculta el campo de desplazamiento según el método elegido, y conecta
   los botones ▲/▼ del stepper (límite 1-25).
 
 ### SF34
 - **Parámetros:** ninguno.
-- **Ubicación:** `front/main.js`.
-- **Qué hace:** contador en vivo "`X / 256 caracteres`" bajo el campo de alfabeto; lo pinta en
+- **Ubicación:** `frontend/main.js`.
+- **Qué hace:** contador en vivo "`X / 1000 caracteres`" bajo el campo de alfabeto; lo pinta en
   rojo si se supera `LIMITE_ALFABETO`.
 
 ### SF35
 - **Parámetros:** ninguno.
-- **Ubicación:** `front/main.js`.
+- **Ubicación:** `frontend/main.js`.
 - **Qué hace:** arranque en `DOMContentLoaded`: restaura el alfabeto de `localStorage`, y
   registra `SF29`-`SF32` como manejadores de eventos, más `SF33` y `SF34`.

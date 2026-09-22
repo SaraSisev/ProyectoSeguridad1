@@ -17,7 +17,10 @@ sección de rendimiento, más abajo): 10 000 caracteres se procesan en medio seg
 aproximadamente, un tiempo razonable para una respuesta web; se estableció ese valor como
 techo para evitar solicitudes que tarden demasiado o consuman recursos de forma excesiva.
 
-El conjunto de caracteres (alfabeto) debe contener entre 2 y 256 caracteres diferentes.
+El conjunto de caracteres (alfabeto) debe contener entre 2 y 1000 caracteres diferentes
+(el límite se definió inicialmente en 256 y luego se amplió a 1000, sin volver a medir
+tiempos: un alfabeto más grande solo afecta la construcción del mapa de índices, un costo
+insignificante frente al análisis del texto).
 
 No se permiten caracteres repetidos dentro del conjunto.
 
@@ -121,7 +124,8 @@ de frecuencias necesita varias palabras para tener suficiente información.
 
 También se probaron los límites de entrada directamente contra la API. El programa aceptó un
 texto de 10 000 caracteres y rechazó uno de 10 001. Aceptó un alfabeto de 256 caracteres
-distintos y rechazó uno de 257. Rechazó también alfabetos vacíos, alfabetos con caracteres
+distintos y rechazó uno de 257 (límite vigente en el momento de esta prueba; se amplió
+después a 1000 caracteres, sin cambiar el mecanismo de validación). Rechazó también alfabetos vacíos, alfabetos con caracteres
 repetidos, métodos de cifrado desconocidos, desplazamientos que no son números enteros, y
 desplazamientos fuera del rango 1-25 (incluyendo 0 y negativos).
 

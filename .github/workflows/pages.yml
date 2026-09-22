@@ -27,10 +27,10 @@ jobs:
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Subir solo la carpeta front/ como sitio
+      - name: Subir solo la carpeta frontend/ como sitio
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "front"
+          path: "frontend"
 
       - name: Publicar en GitHub Pages
         id: deployment

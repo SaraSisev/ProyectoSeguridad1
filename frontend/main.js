@@ -3,7 +3,7 @@ const URL_API_BASE =
     ? "http://127.0.0.1:8787"
     : "https://cifrado-cesar-atbash-backend.saracuevasc0.workers.dev";
 
-const LIMITE_ALFABETO = 256;
+const LIMITE_ALFABETO = 1000;
 
 let SFEstadoAlfabeto = null;
 
