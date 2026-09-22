@@ -1,6 +1,6 @@
-from alfabeto import DESPLAZAMIENTO_MIN, DESPLAZAMIENTO_MAX
+from alfabeto import DESPLAZAMIENTO_MINIMO, SF36
 from cifrado import SF5
-from descifrado import SF6
+from descifrado import SF38
 from analisis_frecuencia import SF18
 
 
@@ -14,8 +14,17 @@ def SF19(texto_cifrado, alfabeto):
         "texto": texto_atbash,
     })
 
-    for desplazamiento in range(DESPLAZAMIENTO_MIN, DESPLAZAMIENTO_MAX + 1):
-        texto_cesar = SF6(texto_cifrado, alfabeto, desplazamiento)
+    # El desplazamiento máximo depende del tamaño real del alfabeto (puede
+    # llegar a 1000 caracteres), no de un valor fijo como 25: con un
+    # alfabeto de longitud N existen N-1 desplazamientos César no
+    # triviales, y hay que probarlos todos para que la autodetección
+    # encuentre el correcto sin importar qué desplazamiento se usó al
+    # cifrar.
+    codigos = [ord(caracter) for caracter in alfabeto]
+    desplazamiento_maximo = SF36(len(alfabeto))
+
+    for desplazamiento in range(DESPLAZAMIENTO_MINIMO, desplazamiento_maximo + 1):
+        texto_cesar = SF38(texto_cifrado, alfabeto, codigos, desplazamiento)
         candidatos.append({
             "metodo": "CESAR",
             "desplazamiento": desplazamiento,

@@ -3,7 +3,7 @@ import unicodedata
 
 from workers import Response
 
-from alfabeto import SF1, DESPLAZAMIENTO_MIN, DESPLAZAMIENTO_MAX, LIMITE_TEXTO
+from alfabeto import SF1, DESPLAZAMIENTO_MINIMO, SF36, LIMITE_TEXTO
 from cifrado import SF4, SF5
 from analizador import SF20
 
@@ -68,9 +68,13 @@ def SF25(payload):
         desplazamiento = payload.get("desplazamiento")
         if not isinstance(desplazamiento, int) or isinstance(desplazamiento, bool):
             return {"error": "El desplazamiento debe ser un número entero."}, 400
-        if desplazamiento < DESPLAZAMIENTO_MIN or desplazamiento > DESPLAZAMIENTO_MAX:
+        desplazamiento_maximo = SF36(len(alfabeto))
+        if desplazamiento < DESPLAZAMIENTO_MINIMO or desplazamiento > desplazamiento_maximo:
             return {
-                "error": f"El desplazamiento debe estar entre {DESPLAZAMIENTO_MIN} y {DESPLAZAMIENTO_MAX}."
+                "error": (
+                    f"El desplazamiento debe estar entre {DESPLAZAMIENTO_MINIMO} "
+                    f"y {desplazamiento_maximo} para este alfabeto."
+                )
             }, 400
         resultado = SF4(texto, alfabeto, desplazamiento)
         return {"metodo": "CESAR", "desplazamiento": desplazamiento, "resultado": resultado}, 200

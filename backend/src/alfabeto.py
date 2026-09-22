@@ -1,7 +1,6 @@
 LIMITE_ALFABETO = 1000
 LIMITE_TEXTO = 10000
-DESPLAZAMIENTO_MIN = 1
-DESPLAZAMIENTO_MAX = 25
+DESPLAZAMIENTO_MINIMO = 1
 
 
 def SF1(alfabeto):
@@ -21,11 +20,18 @@ def SF2(alfabeto):
     return {caracter: indice for indice, caracter in enumerate(alfabeto)}
 
 
+def SF36(longitud_alfabeto):
+    return longitud_alfabeto - 1
+
+
 def SF3(desplazamiento, longitud_alfabeto):
     if not isinstance(desplazamiento, int) or isinstance(desplazamiento, bool):
         raise ValueError("El desplazamiento debe ser un número entero.")
-    if desplazamiento < DESPLAZAMIENTO_MIN or desplazamiento > DESPLAZAMIENTO_MAX:
+    desplazamiento_maximo = SF36(longitud_alfabeto)
+    if desplazamiento < DESPLAZAMIENTO_MINIMO or desplazamiento > desplazamiento_maximo:
         raise ValueError(
-            f"El desplazamiento debe estar entre {DESPLAZAMIENTO_MIN} y {DESPLAZAMIENTO_MAX}."
+            f"El desplazamiento debe estar entre {DESPLAZAMIENTO_MINIMO} "
+            f"y {desplazamiento_maximo} para un alfabeto de "
+            f"{longitud_alfabeto} caracteres."
         )
     return desplazamiento % longitud_alfabeto

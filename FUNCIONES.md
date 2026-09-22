@@ -16,7 +16,7 @@ backend/src/
   descifrado.py            -> únicamente la primitiva de César inverso (con un desplazamiento dado)
   datos_espanol.py         -> datos fijos del idioma: frecuencias, n-gramas, diccionario, morfología
   analisis_frecuencia.py   -> calcula los 9 componentes del puntaje de un candidato
-  analizador.py            -> genera las 26 hipótesis, las puntúa y elige la ganadora
+  analizador.py            -> genera todas las hipótesis posibles para el alfabeto, las puntúa y elige la ganadora
   entry.py                 -> punto de entrada del Worker de Cloudflare (rutas HTTP, CORS)
 ```
 
@@ -35,11 +35,12 @@ texto correcto entre varias hipótesis de descifrado.
 
 ### Cómo se decide el descifrado correcto
 
-`analizador.py` (`SF20`) prueba las 26 claves posibles (Atbash + los 25 desplazamientos
-César), calcula el puntaje multi-componente de cada una (`analisis_frecuencia.SF18`) y se
-queda con la de **mayor valor** (`max(candidatos, key=lambda c: c["analisis"]["total"])`). Un
-solo número por candidato, gana el mayor — sin intervención humana y sin mostrar las otras 25
-opciones descartadas.
+`analizador.py` (`SF20`) prueba **todas** las claves posibles para el alfabeto aplicado (Atbash
++ los N-1 desplazamientos César, donde N es la longitud del alfabeto — no un número fijo de
+25/26), calcula el puntaje multi-componente de cada una (`analisis_frecuencia.SF18`) y se queda
+con la de **mayor valor** (`max(candidatos, key=lambda c: c["analisis"]["total"])`). Un solo
+número por candidato, gana el mayor — sin intervención humana y sin mostrar las demás opciones
+descartadas.
 
 Ese número combina **nueve señales independientes**, cada una midiendo una propiedad distinta
 de "qué tan español real" se ve un texto. Se suman entre sí (las penalizaciones se restan)
@@ -91,8 +92,14 @@ confiable) se determinan con pruebas de escritorio sobre el sistema ya desplegad
   midiendo el tiempo real de análisis (ver `PRUEBAS_Y_LIMITACIONES.md`): 10 000 caracteres se
   procesan en medio segundo aproximadamente. Se valida en `entry.py` (`SF25`, `SF26`) y el
   frontend usa el mismo número como `maxlength="10000"` en ambos campos de texto.
-- `DESPLAZAMIENTO_MIN = 1`, `DESPLAZAMIENTO_MAX = 25`: rango del desplazamiento César, igual
-  que los atributos `min`/`max` del campo de desplazamiento en `frontend/index.html`.
+- `DESPLAZAMIENTO_MINIMO = 1`: cota inferior del desplazamiento César. La cota superior ya no
+  es una constante fija: depende del tamaño real del alfabeto aplicado (`SF36`), porque un
+  alfabeto de longitud N tiene exactamente N-1 desplazamientos no triviales. Con el alfabeto
+  clásico de 26-27 letras esa cota coincide con 25-26, pero con un alfabeto personalizado de,
+  por ejemplo, 101 o 1000 caracteres, el desplazamiento válido llega hasta 100 o 999. Antes de
+  esta corrección el rango estaba fijo en 1-25 sin importar el alfabeto, lo que hacía fallar
+  tanto el cifrado como la autodetección para cualquier desplazamiento mayor a 25 en un
+  alfabeto más grande que el clásico.
 
 ### SF1
 - **Parámetros:** `alfabeto` (str).
@@ -109,15 +116,27 @@ confiable) se determinan con pruebas de escritorio sobre el sistema ya desplegad
 - **Parámetros:** `alfabeto` (str).
 - **Ubicación:** `backend/src/alfabeto.py`.
 - **Qué hace:** construye el mapa `carácter -> posición` dentro del alfabeto.
-- **Quién la usa:** `SF4`, `SF5` (en `cifrado.py`) y `SF6` (en `descifrado.py`).
+- **Quién la usa:** `SF5` (en `cifrado.py`).
 
 ### SF3
-- **Parámetros:** `desplazamiento` (int, 1-25), `longitud_alfabeto` (int).
+- **Parámetros:** `desplazamiento` (int), `longitud_alfabeto` (int).
 - **Ubicación:** `backend/src/alfabeto.py`.
-- **Qué hace:** valida el rango 1-25 y normaliza el desplazamiento al tamaño real del
-  alfabeto (`% longitud_alfabeto`).
+- **Qué hace:** valida que el desplazamiento esté entre `DESPLAZAMIENTO_MINIMO` (1) y
+  `SF36(longitud_alfabeto)` (longitud del alfabeto menos 1) y lo normaliza
+  (`% longitud_alfabeto`). El límite superior se calcula a partir del alfabeto recibido, no es
+  un valor fijo: así un alfabeto de 101 caracteres acepta desplazamientos 1-100, y uno de 1000
+  caracteres acepta 1-999.
 - **Lanza:** `ValueError` si no es un entero válido o está fuera de rango.
-- **Quién la usa:** `SF4` (en `cifrado.py`) y `SF6` (en `descifrado.py`).
+- **Quién la usa:** `SF37` (en `cifrado.py`) y `SF38` (en `descifrado.py`).
+
+### SF36
+- **Parámetros:** `longitud_alfabeto` (int).
+- **Ubicación:** `backend/src/alfabeto.py`.
+- **Qué hace:** devuelve `longitud_alfabeto - 1`, el desplazamiento César máximo válido para un
+  alfabeto de ese tamaño (el número de desplazamientos no triviales que existen).
+- **Quién la usa:** `SF3` (misma función, valida contra este límite), `SF19` (en
+  `analizador.py`, define hasta dónde llega el bucle de fuerza bruta) y `SF25` (en `entry.py`,
+  valida el desplazamiento recibido al cifrar manualmente).
 
 ---
 
@@ -125,12 +144,23 @@ confiable) se determinan con pruebas de escritorio sobre el sistema ya desplegad
 
 Importa `SF2` y `SF3` de `alfabeto.py`.
 
-### SF4 (César — cifrar)
-- **Parámetros:** `texto` (str), `alfabeto` (str), `desplazamiento` (int, 1-25).
+### SF37 (César — construir tabla de sustitución y cifrar)
+- **Parámetros:** `texto` (str), `alfabeto` (str), `codigos` (list[int], los `ord()` de cada
+  carácter del alfabeto ya calculados), `desplazamiento` (int).
 - **Ubicación:** `backend/src/cifrado.py`.
-- **Qué hace:** cifra `texto` con César. Para cada carácter, si está en el alfabeto, se
-  reemplaza por el que está `desplazamiento` posiciones adelante (cíclico); si no está en el
-  alfabeto se deja igual ("se pasa por alto").
+- **Qué hace:** construye una tabla `ordinal_original -> carácter_destino` y la aplica con
+  `str.translate`, en vez de recorrer `texto` carácter por carácter en un bucle de Python. Con
+  alfabetos de hasta 1000 caracteres y hasta 999 desplazamientos que la autodetección (`SF19`)
+  puede necesitar probar, ese bucle interpretado por candidato era demasiado lento; recibir
+  `codigos` ya calculado evita repetir ese trabajo en cada llamada.
+- **Quién la usa:** `SF4` (misma responsabilidad, para una sola llamada).
+
+### SF4 (César — cifrar)
+- **Parámetros:** `texto` (str), `alfabeto` (str), `desplazamiento` (int).
+- **Ubicación:** `backend/src/cifrado.py`.
+- **Qué hace:** calcula `codigos` y delega en `SF37`. Cifra `texto` con César: para cada
+  carácter, si está en el alfabeto, se reemplaza por el que está `desplazamiento` posiciones
+  adelante (cíclico); si no está en el alfabeto se deja igual ("se pasa por alto").
 - **Quién la usa:** `SF25` en `entry.py`.
 
 ### SF5 (Atbash — cifra y descifra, es autoinverso)
@@ -146,16 +176,27 @@ Importa `SF2` y `SF3` de `alfabeto.py`.
 
 ## `backend/src/descifrado.py`
 
-Solo contiene la primitiva de descifrado César; la orquestación de las 26 hipótesis vive en
+Solo contiene la primitiva de descifrado César; la orquestación de las hipótesis vive en
 `analizador.py`.
 
-### SF6 (César — descifrar con un desplazamiento dado)
-- **Parámetros:** `texto` (str), `alfabeto` (str), `desplazamiento` (int, 1-25).
+### SF38 (César — construir tabla de sustitución y descifrar)
+- **Parámetros:** `texto` (str), `alfabeto` (str), `codigos` (list[int]), `desplazamiento`
+  (int).
 - **Ubicación:** `backend/src/descifrado.py`.
-- **Qué hace:** inversa de `SF4`: resta el desplazamiento en vez de sumarlo (mismo criterio
-  de "pasar por alto" los caracteres fuera del alfabeto).
-- **Quién la usa:** `SF19` (en `analizador.py`), 25 veces, una por cada desplazamiento
-  candidato.
+- **Qué hace:** la contraparte de `SF37`: construye la tabla `ordinal_original ->
+  carácter_destino` **restando** el desplazamiento (en vez de sumarlo) y la aplica con
+  `str.translate`. Es la función que `SF19` llama en su bucle de fuerza bruta.
+- **Quién la usa:** `SF6` (misma responsabilidad, para una sola llamada) y `SF19` (en
+  `analizador.py`), una vez por cada desplazamiento candidato (hasta `longitud_alfabeto - 1`
+  veces).
+
+### SF6 (César — descifrar con un desplazamiento dado)
+- **Parámetros:** `texto` (str), `alfabeto` (str), `desplazamiento` (int).
+- **Ubicación:** `backend/src/descifrado.py`.
+- **Qué hace:** calcula `codigos` y delega en `SF38`. Inversa de `SF4`: resta el desplazamiento
+  en vez de sumarlo (mismo criterio de "pasar por alto" los caracteres fuera del alfabeto).
+- **Quién la usa:** pruebas directas de ida y vuelta (`test_logica.py`); la autodetección usa
+  `SF38` directamente por rendimiento.
 
 ---
 
@@ -174,7 +215,14 @@ Porcentaje de aparición de cada letra española en el idioma (a=12.53%, e=13.68
 
 ### `PALABRAS_MUY_COMUNES`, `PALABRAS_COMUNES` (constantes)
 Diccionario en dos niveles: ~20 palabras gramaticales de uso constante (de, la, que, el...) y
-un conjunto más amplio de palabras y verbos comunes.
+un conjunto más amplio (~545, ~566 en total con los dos niveles) de palabras de uso cotidiano
+— sustantivos, adjetivos y verbos
+comunes (hola, casa, agua, niño, trabajo, grande...), no solo conectores gramaticales. La
+versión original solo cubría conectores, así que una palabra suelta real (por ejemplo "casa")
+no recibía ningún puntaje de `SF10` y la autodetección de palabras cortas dependía solo de
+señales estadísticas poco confiables con tan pocas letras; ampliar el diccionario fue el ajuste
+de mayor impacto para mejorar la precisión con textos cortos (ver
+`PRUEBAS_Y_LIMITACIONES.md`).
 
 ### `PESOS_BIGRAMAS`, `PESOS_TRIGRAMAS`, `PESOS_TETRAGRAMAS` (constantes)
 Peso de las combinaciones de 2, 3 y 4 letras más típicas del español ("de", "que", "para",
@@ -225,8 +273,17 @@ necesita.
 ### SF10 (palabras del diccionario)
 - **Parámetros:** `palabras` (list[str]).
 - **Ubicación:** `backend/src/analisis_frecuencia.py`.
-- **Qué hace:** suma `3.0 + min(long, 8) * 0.80` por cada palabra en `PALABRAS_MUY_COMUNES`, y
-  `1.5 + min(long, 8) * 0.50` por cada una en `PALABRAS_COMUNES`.
+- **Qué hace:** ignora las "palabras" de menos de 3 letras y suma `4.0 + min(long, 8) * 0.80`
+  por cada una en `PALABRAS_MUY_COMUNES`, o `2.5 + min(long, 8) * 0.50` por cada una en
+  `PALABRAS_COMUNES`.
+- **Por qué ignora las de 1-2 letras:** `SF8` corta una "palabra" en cualquier carácter no
+  alfabético, así que un candidato de puro ruido con signos de puntuación intercalados puede
+  dejar una letra o dos aisladas entre símbolos. Como "a", "y", "es", "la" son palabras reales
+  y están en el diccionario, esas coincidencias aisladas puntuaban igual que un acierto real y
+  podían inflar un candidato sin sentido por encima de una palabra real más larga que no está
+  en el diccionario. El peso base también se subió (de 3.0/1.5 a 4.0/2.5) para que un acierto
+  de diccionario genuino pese más que una racha de suerte en frecuencia de letras o bigramas
+  (ver `PRUEBAS_Y_LIMITACIONES.md`).
 - **Quién la usa:** `SF18`.
 
 ### SF11 (patrones — bigramas, trigramas, tetragramas)
@@ -253,8 +310,13 @@ necesita.
 ### SF15 (proporción de vocales)
 - **Parámetros:** `texto_normalizado` (str).
 - **Ubicación:** `backend/src/analisis_frecuencia.py`.
-- **Qué hace:** `puntaje = 12.0 - |ratio - objetivo| * 40`; resta 8 puntos extra si el ratio
-  se sale de `RATIO_VOCALES_MIN`/`MAX`.
+- **Qué hace:** `puntaje = 12.0 - |ratio - objetivo| * 40`; resta 8 puntos extra si el ratio se
+  sale de `RATIO_VOCALES_MIN`/`MAX`, pero **solo cuando hay muestra completa**
+  (`len(letras) >= MUESTRA_MINIMA_CONFIABLE`). Con pocas letras esos 8 puntos se omiten y solo
+  queda el término suave de distancia (que ya se atenúa por `confianza`): una palabra real y
+  corta como "agua" (75 % de vocales) supera fácilmente el rango razonable sin que eso sea
+  evidencia de mal descifrado, y aplicar la resta fija incluso atenuada bastaba para anular el
+  puntaje que esa misma palabra ya ganaba en `SF10` por estar en el diccionario.
 - **Devuelve:** `(puntaje, ratio)`. Sin letras: `(-20.0, 0.0)`.
 - **Quién la usa:** `SF18`.
 
@@ -280,14 +342,22 @@ necesita.
 
 ## `backend/src/analizador.py`
 
-Orquesta el criptoanálisis completo: genera las 26 hipótesis, las puntúa y elige la ganadora.
+Orquesta el criptoanálisis completo: genera todas las hipótesis posibles para el alfabeto
+aplicado, las puntúa y elige la ganadora.
 
-### SF19 (generar las 26 hipótesis)
+### SF19 (generar todas las hipótesis)
 - **Parámetros:** `texto_cifrado` (str), `alfabeto` (str).
 - **Ubicación:** `backend/src/analizador.py`.
-- **Qué hace:** genera el candidato Atbash (`cifrado.SF5`) y los 25 candidatos César
-  (`descifrado.SF6`, desplazamientos 1 a 25 — el mismo rango permitido al cifrar; no se
-  prueban desplazamientos fuera de ese rango porque nunca podrían haberse usado para cifrar).
+- **Qué hace:** genera el candidato Atbash (`cifrado.SF5`) y un candidato César
+  (`descifrado.SF38`) por cada desplazamiento de `DESPLAZAMIENTO_MINIMO` (1) hasta
+  `SF36(len(alfabeto))` (longitud del alfabeto menos 1) — es decir, **todos** los
+  desplazamientos no triviales posibles para ese alfabeto, no un rango fijo de 25. Antes de la
+  corrección el bucle se detenía siempre en 25, así que un texto cifrado con un desplazamiento
+  mayor (posible en cualquier alfabeto de más de 26 caracteres, y el proyecto permite hasta
+  1000) nunca aparecía entre los candidatos y la autodetección devolvía el mejor de un grupo de
+  candidatos todos incorrectos. Los códigos `ord()` del alfabeto se calculan una sola vez
+  (`codigos`) y se reutilizan en cada llamada a `SF38` en vez de recalcularlos por
+  desplazamiento.
 - **Devuelve:** lista de `{"metodo": "ATBASH"|"CESAR", "desplazamiento": int|None,
   "texto": str}`.
 - **Quién la usa:** `SF20`.

@@ -3,13 +3,15 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from alfabeto import SF1, LIMITE_ALFABETO, LIMITE_TEXTO, DESPLAZAMIENTO_MIN, DESPLAZAMIENTO_MAX
+from alfabeto import SF1, SF36, LIMITE_ALFABETO, LIMITE_TEXTO, DESPLAZAMIENTO_MINIMO
 from cifrado import SF4, SF5
 from descifrado import SF6
 from analizador import SF20
 
 ALFABETO = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ"
 ALFABETO_SIMPLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+DESPLAZAMIENTO_MAX_ALFABETO = SF36(len(ALFABETO))
+DESPLAZAMIENTO_MAX_ALFABETO_SIMPLE = SF36(len(ALFABETO_SIMPLE))
 
 _resultados = []
 
@@ -81,10 +83,10 @@ def t08():
         pass
 
 
-@prueba(f"desplazamiento {DESPLAZAMIENTO_MAX + 1} se rechaza")
+@prueba("desplazamiento igual a la longitud del alfabeto se rechaza (equivale a 0)")
 def t09():
     try:
-        SF4("A", ALFABETO, DESPLAZAMIENTO_MAX + 1)
+        SF4("A", ALFABETO, len(ALFABETO))
         assert False, "deberia haber lanzado ValueError"
     except ValueError:
         pass
@@ -99,15 +101,15 @@ def t10():
         pass
 
 
-@prueba(f"desplazamiento {DESPLAZAMIENTO_MIN} se acepta")
+@prueba(f"desplazamiento {DESPLAZAMIENTO_MINIMO} se acepta")
 def t11():
-    resultado = SF4("A", ALFABETO, DESPLAZAMIENTO_MIN)
+    resultado = SF4("A", ALFABETO, DESPLAZAMIENTO_MINIMO)
     assert resultado == "B"
 
 
-@prueba(f"desplazamiento {DESPLAZAMIENTO_MAX} se acepta")
+@prueba("desplazamiento maximo posible para el alfabeto (longitud - 1) se acepta")
 def t12():
-    resultado = SF4("A", ALFABETO_SIMPLE, DESPLAZAMIENTO_MAX)
+    resultado = SF4("A", ALFABETO_SIMPLE, DESPLAZAMIENTO_MAX_ALFABETO_SIMPLE)
     assert resultado == "Z"
 
 
@@ -116,10 +118,10 @@ def t13():
     assert SF4("HOLA", ALFABETO_SIMPLE, 3) == "KROD"
 
 
-@prueba("cesar: roundtrip cifrar/descifrar para todos los shifts 1-25")
+@prueba("cesar: roundtrip cifrar/descifrar para todos los shifts posibles del alfabeto")
 def t14():
     texto = "LA FAMILIA COME EN LA COCINA"
-    for shift in range(DESPLAZAMIENTO_MIN, DESPLAZAMIENTO_MAX + 1):
+    for shift in range(DESPLAZAMIENTO_MINIMO, DESPLAZAMIENTO_MAX_ALFABETO + 1):
         cifrado = SF4(texto, ALFABETO, shift)
         descifrado = SF6(cifrado, ALFABETO, shift)
         assert descifrado == texto, f"fallo en shift={shift}"
@@ -158,10 +160,10 @@ def t18():
     assert resultado["texto"] == texto
 
 
-@prueba("autodeteccion: los 25 desplazamientos posibles se detectan correctamente en una frase")
+@prueba("autodeteccion: los desplazamientos posibles del alfabeto se detectan correctamente en una frase")
 def t19():
     texto = "ESTA ES UNA PRUEBA DE COMUNICACION ENTRE VARIAS PERSONAS DE LA MISMA FAMILIA"
-    for shift in range(DESPLAZAMIENTO_MIN, DESPLAZAMIENTO_MAX + 1):
+    for shift in range(DESPLAZAMIENTO_MINIMO, DESPLAZAMIENTO_MAX_ALFABETO + 1):
         cifrado = SF4(texto, ALFABETO, shift)
         resultado = SF20(cifrado, ALFABETO)
         assert resultado["metodo"] == "CESAR" and resultado["desplazamiento"] == shift, (
@@ -184,6 +186,54 @@ def t21():
     texto = "ATAQUE AL AMANECER, CONFIRMADO ¿VERDAD? 中文"
     cifrado = SF4(texto, alfabeto_mixto, 11)
     descifrado = SF6(cifrado, alfabeto_mixto, 11)
+    assert descifrado == texto
+
+
+@prueba(
+    "autodeteccion: alfabeto de 101 caracteres con desplazamiento 63 "
+    "(fuera del rango 1-25 que usaba la version anterior) se detecta correctamente"
+)
+def t23():
+    alfabeto_amplio = (
+        "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ"
+        "abcdefghijklmnñopqrstuvwxyz"
+        "ÁÉÍÓÚÜáéíóúü"
+        "0123456789"
+        ".,;:!?¿¡()[]{}+-=*/_%@#&$"
+    )
+    assert len(alfabeto_amplio) == 101
+    texto = (
+        "El desarrollo tecnologico transforma la sociedad y la economia "
+        "de maneras que apenas comenzamos a comprender"
+    )
+    shift = 63
+    assert shift > SF36(26), "el shift debe superar el limite historico de 25"
+    cifrado = SF4(texto, alfabeto_amplio, shift)
+    resultado = SF20(cifrado, alfabeto_amplio)
+    assert resultado["metodo"] == "CESAR", (
+        f"se esperaba CESAR y se detecto {resultado['metodo']}"
+    )
+    assert resultado["desplazamiento"] == shift, (
+        f"se esperaba shift={shift} y se detecto {resultado['desplazamiento']}"
+    )
+    assert resultado["texto"] == texto, (
+        f"texto detectado incorrecto: {resultado['texto'][:60]!r}"
+    )
+
+
+@prueba(
+    "cifrado/descifrado: alfabeto de 1000 caracteres (limite maximo) acepta "
+    "y revierte correctamente el desplazamiento maximo posible (999), que la "
+    "version anterior rechazaba por estar fuera de 1-25"
+)
+def t24():
+    alfabeto_maximo = "".join(chr(c) for c in range(0x21, 0x21 + LIMITE_ALFABETO))
+    assert len(alfabeto_maximo) == LIMITE_ALFABETO
+    shift = SF36(LIMITE_ALFABETO)
+    assert shift == LIMITE_ALFABETO - 1
+    texto = alfabeto_maximo[:50]
+    cifrado = SF4(texto, alfabeto_maximo, shift)
+    descifrado = SF6(cifrado, alfabeto_maximo, shift)
     assert descifrado == texto
 
 

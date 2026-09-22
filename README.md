@@ -20,13 +20,17 @@ backend/  -> Cloudflare Worker en Python (beta "Python Workers"), se publica en 
     descifrado.py            -> primitiva de César inverso (con un desplazamiento dado)
     datos_espanol.py         -> datos fijos del idioma: frecuencias, n-gramas, diccionario, morfología
     analisis_frecuencia.py   -> calcula los 9 componentes del puntaje de un candidato
-    analizador.py            -> genera las 26 hipótesis, puntúa y elige la ganadora (Al-Kindi)
+    analizador.py            -> genera todas las hipótesis posibles, puntúa y elige la ganadora (Al-Kindi)
     entry.py                 -> punto de entrada del Worker (rutas HTTP, CORS)
 ```
 
 ## Backend — Cloudflare Workers (Python)
 
-**Ya desplegado en:** https://cifrado-cesar-atbash-backend.saracuevasc0.workers.dev
+**Ya desplegado en:** https://cifrado-cesar-atbash-backend.cifrador-cesar-atbash.workers.dev
+
+> Nota: la URL cambió de cuenta de Cloudflare al corregir el descifrado (septiembre 2026). La
+> URL anterior (`cifrado-cesar-atbash-backend.saracuevasc0.workers.dev`) seguía apuntando al
+> código sin corregir; `frontend/main.js` ya apunta a la URL nueva.
 
 Requisitos: Node.js (para la CLI `wrangler`) y una cuenta de Cloudflare.
 
@@ -61,7 +65,7 @@ nada. Abre `http://127.0.0.1:5500` en el navegador para probar todo el flujo com
 Endpoints expuestos (todos `POST`, cuerpo y respuesta en JSON, con CORS abierto):
 
 - `POST /api/alfabeto/validar` — body `{ "alfabeto": "..." }`
-- `POST /api/cifrar` — body `{ "alfabeto": "...", "metodo": "CESAR"|"ATBASH", "texto": "...", "desplazamiento": 1-25 (solo si CESAR) }`
+- `POST /api/cifrar` — body `{ "alfabeto": "...", "metodo": "CESAR"|"ATBASH", "texto": "...", "desplazamiento": entero entre 1 y (longitud del alfabeto - 1), solo si CESAR }`
 - `POST /api/descifrar` — body `{ "alfabeto": "...", "texto": "..." }` (el método y el desplazamiento se detectan automáticamente)
 
 ## Frontend — GitHub Pages
