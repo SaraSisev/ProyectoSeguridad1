@@ -39,7 +39,7 @@ def t03():
     assert valido is True
 
 
-@prueba(f"alfabeto de {LIMITE_ALFABETO} caracteres repetidos se rechaza (no son 256 distintos)")
+@prueba(f"alfabeto de {LIMITE_ALFABETO} caracteres repetidos se rechaza (no son {LIMITE_ALFABETO} distintos)")
 def t04():
     valido, _ = SF1("A" * LIMITE_ALFABETO)
     assert valido is False
@@ -47,10 +47,10 @@ def t04():
 
 @prueba(f"alfabeto de {LIMITE_ALFABETO} caracteres distintos se acepta")
 def t04b():
-    alfabeto_256 = "".join(chr(c) for c in range(0x21, 0x21 + LIMITE_ALFABETO))
-    valido, _ = SF1(alfabeto_256)
+    alfabeto_limite = "".join(chr(c) for c in range(0x21, 0x21 + LIMITE_ALFABETO))
+    valido, _ = SF1(alfabeto_limite)
     assert valido is True
-    assert len(alfabeto_256) == LIMITE_ALFABETO
+    assert len(alfabeto_limite) == LIMITE_ALFABETO
 
 
 @prueba(f"alfabeto de {LIMITE_ALFABETO + 1} caracteres distintos se rechaza")
