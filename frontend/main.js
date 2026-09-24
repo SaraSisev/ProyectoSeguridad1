@@ -35,11 +35,6 @@ function SF28(mensaje, esError) {
 function SF39() {
   const campoShift = document.getElementById("encrypt-shift");
 
-  // El backend acepta desplazamientos de 1 a (longitud del alfabeto - 1), no
-  // un tope fijo. Se cuenta por puntos de código sobre la forma NFC para que
-  // el número coincida exactamente con el len() que calcula Python tras
-  // normalizar: string.length contaría de más los caracteres fuera del plano
-  // básico (emojis, jeroglíficos) y el backend rechazaría el desplazamiento.
   const maximo = SFEstadoAlfabeto
     ? [...SFEstadoAlfabeto.normalize("NFC")].length - 1
     : LIMITE_ALFABETO - 1;

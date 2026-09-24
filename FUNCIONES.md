@@ -261,12 +261,30 @@ y longitud a partir de la cual una "palabra" se considera sospechosamente larga 
 El motor de puntuación de un solo candidato. Importa de `datos_espanol.py` todo lo que
 necesita.
 
+### `MUESTRA_MINIMA_CONFIABLE = 15`, `NEUTRO_FRECUENCIA = 8.0` (constantes)
+Definen a partir de cuántas letras españolas un candidato se evalúa con confianza estadística
+total, y hacia qué valor neutro se atenúa su puntaje cuando no llega a ese mínimo.
+
+Con alfabetos personalizados que mezclan letras y muchos símbolos, o con textos muy cortos, un
+candidato puede tener apenas un puñado de letras españolas reales. Con tan pocas muestras, el
+chi-cuadrado de `SF9` y el ratio de vocales de `SF15` son estadísticamente poco confiables: dos
+o tres letras que caen "bien" por pura casualidad pueden disparar el puntaje tanto como un
+texto real de varias palabras. Por eso ambas señales se atenúan de forma proporcional a cuántas
+letras aportó realmente el candidato, y la decisión queda en manos del diccionario (`SF10`), que
+sí es confiable con poco texto. Las usan `SF9` y `SF15`.
+
 ### SF9 (frecuencia de letras)
 - **Parámetros:** `texto_normalizado` (str).
 - **Ubicación:** `backend/src/analisis_frecuencia.py`.
 - **Qué hace:** chi-cuadrado clásico entre la mezcla de letras del candidato y
   `FRECUENCIA_LETRAS`, normalizado y convertido a un puntaje acotado:
   `35 / (1 + chi_cuadrado_normalizado)`.
+- **Atenuación por tamaño de muestra:** ese puntaje bruto no se devuelve tal cual. Se calcula
+  `confianza = min(1.0, total_letras / MUESTRA_MINIMA_CONFIABLE)` y se devuelve
+  `NEUTRO_FRECUENCIA + confianza * (puntaje_bruto - NEUTRO_FRECUENCIA)`. Con 15 letras o más la
+  confianza vale 1 y el resultado es el puntaje bruto completo; con menos, el valor se acerca
+  proporcionalmente a `NEUTRO_FRECUENCIA` (8.0), de modo que la señal deja de premiar o
+  castigar cuando no tiene material suficiente para ser confiable.
 - **Caso especial:** sin letras españolas reconocibles, devuelve `-20.0`.
 - **Quién la usa:** `SF18`.
 
@@ -327,6 +345,13 @@ necesita.
   `SF17` puntúa la plausibilidad de las palabras: bono por tener varias, penalización por
   palabras muy largas, sin vocales, con 5+ consonantes seguidas (`SF16`), o con un carácter
   repetido 4+ veces. Sin palabras, devuelve `-15.0`.
+- **Por qué el castigo por "palabra sin vocal" es proporcional y no fijo:** resta
+  `min(longitud, 4) * 0.75` en vez de una cantidad fija. Un alfabeto con muchos símbolos
+  intercalados trocea las palabras reales en fragmentos cortos, así que un fragmento de 2-3
+  consonantes es un efecto colateral esperable del alfabeto elegido, no evidencia fuerte de mal
+  descifrado; con una resta fija, esos fragmentos hundían candidatos correctos. La racha larga
+  (5+ consonantes seguidas, detectada por `SF16`) sigue penalizada con fuerza, porque esa sí es
+  prácticamente imposible en español real.
 - **Quién las usa:** `SF18`.
 
 ### SF18 (puntaje total de un candidato)

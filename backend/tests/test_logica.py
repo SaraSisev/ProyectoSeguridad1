@@ -239,12 +239,8 @@ def t24():
 
 @prueba("caso documentado: palabra suelta muy corta puede fallar la autodeteccion")
 def t22():
-    # Esta prueba documenta una limitacion conocida, no exige que el sistema acierte:
-    # con muy pocas letras, el analisis de frecuencias no tiene material suficiente.
-    # Se deja registrada para poder monitorear si el comportamiento cambia con el tiempo.
     cifrado = SF5("HOLA", ALFABETO)
     resultado = SF20(cifrado, ALFABETO)
-    # No se afirma nada sobre el resultado: solo que la funcion no truena.
     assert "metodo" in resultado and "texto" in resultado
 
 

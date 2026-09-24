@@ -23,15 +23,6 @@ from datos_espanol import (
 
 PATRON_REPETICION = re.compile(r"(.)\1{3,}")
 
-# Con alfabetos personalizados que mezclan letras con muchos simbolos, o con
-# textos muy cortos, un candidato puede tener apenas un puñado de letras
-# españolas reales. Con tan pocas muestras, el chi-cuadrado de SF9 y el ratio
-# de vocales de SF15 son estadisticamente poco confiables: un par de letras
-# "acertadas" de pura casualidad puede disparar el puntaje tanto como un
-# texto real de varias palabras. MUESTRA_MINIMA_CONFIABLE define a partir de
-# cuantas letras un candidato se evalua con confianza total; por debajo de
-# eso, su puntaje se atenua hacia un valor neutro proporcional a cuantas
-# letras realmente aporto.
 MUESTRA_MINIMA_CONFIABLE = 15
 NEUTRO_FRECUENCIA = 8.0
 
@@ -61,14 +52,6 @@ def SF9(texto_normalizado):
 def SF10(palabras):
     puntaje = 0.0
     for palabra in palabras:
-        # Una "palabra" de una sola letra ("a", "y", "o"...) es una palabra
-        # real del español, pero tambien es justo lo que queda cuando un
-        # candidato de puro ruido tiene una letra suelta entre simbolos
-        # (el alfabeto incluye signos de puntuacion, y SF8 corta una
-        # "palabra" en cualquier corte no alfabetico). Sin este filtro, esa
-        # letra suelta puntuaba igual que un acierto real de diccionario y
-        # podia inflar a un candidato de puro ruido por encima de una
-        # palabra real mas larga que no esta en el diccionario.
         if len(palabra) < 3:
             continue
         if palabra in PALABRAS_MUY_COMUNES:
@@ -121,18 +104,8 @@ def SF15(texto_normalizado):
     distancia = abs(ratio - RATIO_VOCALES_OBJETIVO)
     puntaje_bruto = 12.0 - distancia * 40
 
-    # Igual que en SF9: con pocas letras, el ratio de vocales es poco
-    # confiable (una sola letra da un ratio de 0 o 1). Sin evidencia
-    # suficiente, ni se premia ni se castiga.
     confianza = min(1.0, len(letras) / MUESTRA_MINIMA_CONFIABLE)
 
-    # La penalizacion fija por "ratio fuera de rango razonable" solo se
-    # aplica con muestra completa. Con pocas letras, una palabra real y
-    # corta ("agua", "idea", "aula") puede superar facilmente el 65% de
-    # vocales sin que eso sea evidencia de mal descifrado; aplicar la
-    # penalizacion tambien ahi, aunque atenuada, alcanzaba a borrar el
-    # puntaje que esa misma palabra ya ganaba en SF10 por estar en el
-    # diccionario.
     if confianza >= 1.0 and (ratio < RATIO_VOCALES_MIN or ratio > RATIO_VOCALES_MAX):
         puntaje_bruto -= 8.0
 
@@ -165,10 +138,6 @@ def SF17(palabras):
 
         contiene_vocal = any(c in VOCALES for c in palabra)
         if len(palabra) > 1 and not contiene_vocal:
-            # Un alfabeto con muchos simbolos intercalados trocea palabras
-            # reales en fragmentos cortos; un fragmento de 2-3 consonantes
-            # es un efecto colateral esperable, no evidencia fuerte de mal
-            # descifrado. La racha larga sigue penalizada con fuerza.
             puntaje -= min(len(palabra), 4) * 0.75
 
         secuencia_consonantes = SF16(palabra)

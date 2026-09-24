@@ -2,12 +2,6 @@ from alfabeto import SF2, SF3
 
 
 def SF37(texto, alfabeto, codigos, desplazamiento):
-    # Sustituye con una tabla ordinal->carácter aplicada con str.translate
-    # en vez de un bucle carácter por carácter en Python. Con alfabetos de
-    # hasta 1000 caracteres y hasta 999 desplazamientos posibles que probar
-    # en la autodetección (SF19), un bucle interpretado por candidato es
-    # demasiado lento; recibir "codigos" (los ord() de cada carácter del
-    # alfabeto) ya calculados evita repetir ese trabajo en cada llamada.
     paso = SF3(desplazamiento, len(alfabeto))
     longitud = len(alfabeto)
     tabla = {

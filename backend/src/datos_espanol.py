@@ -32,11 +32,6 @@ PALABRAS_COMUNES = {
     "puede", "pueden", "hacer", "tiene", "tienen", "ser", "son", "fue",
     "era", "han", "ha", "sea", "solo", "parte", "tiempo", "forma",
     "despues", "nuevo", "misma", "mismo",
-    # Palabras cortas de uso cotidiano (sustantivos, saludos, respuestas):
-    # el diccionario original solo cubria conectores gramaticales, asi que
-    # una palabra suelta y real como "casa" o "hola" no recibia ningun
-    # puntaje de SF10 y la decision quedaba solo en manos de las senales
-    # estadisticas, poco confiables con tan pocas letras.
     "hola", "adios", "gracias", "amor", "perro", "gato", "agua", "sol",
     "luna", "paz", "vida", "mal", "hoy", "aqui", "alli", "ahi", "familia",
     "mesa", "libro", "noche", "dia", "dias", "cielo", "tierra", "fuego",
@@ -79,9 +74,6 @@ PALABRAS_COMUNES = {
     "estudia", "juega", "come", "bebe", "duerme", "camina", "corre",
     "llega", "sale", "entra", "busca", "encuentra", "necesito",
     "necesita",
-    # Mas sustantivos cotidianos: animales, naturaleza, cuerpo, hogar.
-    # Un diccionario mas amplio reduce cuantas palabras reales quedan sin
-    # el bono de SF10 frente a un candidato de puro ruido.
     "pajaro", "pajaros", "vaca", "caballo", "conejo", "pato", "pollo",
     "raton", "oso", "leon", "tigre", "elefante", "mono", "oveja",
     "cerdo", "burro", "ganso", "aguila", "serpiente", "rana", "abeja",

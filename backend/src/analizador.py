@@ -14,12 +14,6 @@ def SF19(texto_cifrado, alfabeto):
         "texto": texto_atbash,
     })
 
-    # El desplazamiento máximo depende del tamaño real del alfabeto (puede
-    # llegar a 1000 caracteres), no de un valor fijo como 25: con un
-    # alfabeto de longitud N existen N-1 desplazamientos César no
-    # triviales, y hay que probarlos todos para que la autodetección
-    # encuentre el correcto sin importar qué desplazamiento se usó al
-    # cifrar.
     codigos = [ord(caracter) for caracter in alfabeto]
     desplazamiento_maximo = SF36(len(alfabeto))
 
