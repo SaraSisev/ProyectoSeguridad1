@@ -32,6 +32,24 @@ function SF28(mensaje, esError) {
   }
 }
 
+function SF39() {
+  const campoShift = document.getElementById("encrypt-shift");
+
+  // El backend acepta desplazamientos de 1 a (longitud del alfabeto - 1), no
+  // un tope fijo. Se cuenta por puntos de código sobre la forma NFC para que
+  // el número coincida exactamente con el len() que calcula Python tras
+  // normalizar: string.length contaría de más los caracteres fuera del plano
+  // básico (emojis, jeroglíficos) y el backend rechazaría el desplazamiento.
+  const maximo = SFEstadoAlfabeto
+    ? [...SFEstadoAlfabeto.normalize("NFC")].length - 1
+    : LIMITE_ALFABETO - 1;
+
+  campoShift.max = maximo;
+  if (Number(campoShift.value) > maximo) {
+    campoShift.value = maximo;
+  }
+}
+
 async function SF29(evento) {
   evento.preventDefault();
   const entrada = document.getElementById("alphabet-input").value;
@@ -46,6 +64,7 @@ async function SF29(evento) {
     SFEstadoAlfabeto = null;
     SF28(err.message, true);
   }
+  SF39();
 }
 
 async function SF30(evento) {
@@ -128,7 +147,8 @@ function SF33() {
   actualizarVisibilidad();
 
   arriba.addEventListener("click", () => {
-    campoShift.value = Math.min(25, Number(campoShift.value) + 1);
+    const maximo = Number(campoShift.max) || LIMITE_ALFABETO - 1;
+    campoShift.value = Math.min(maximo, Number(campoShift.value) + 1);
   });
   abajo.addEventListener("click", () => {
     campoShift.value = Math.max(1, Number(campoShift.value) - 1);
@@ -167,6 +187,7 @@ function SF35() {
 
   SF33();
   SF34();
+  SF39();
 }
 
 document.addEventListener("DOMContentLoaded", SF35);

@@ -501,7 +501,8 @@ Copia en el frontend del mismo `1000` que usa `alfabeto.py`, para el contador en
 - **Parámetros:** ninguno.
 - **Ubicación:** `frontend/main.js`.
 - **Qué hace:** muestra/oculta el campo de desplazamiento según el método elegido, y conecta
-  los botones ▲/▼ del stepper (límite 1-25).
+  los botones ▲/▼ del stepper. El tope de los botones ya no es fijo: leen el atributo `max`
+  del campo, que `SF39` mantiene sincronizado con el alfabeto aplicado.
 
 ### SF34
 - **Parámetros:** ninguno.
@@ -513,4 +514,20 @@ Copia en el frontend del mismo `1000` que usa `alfabeto.py`, para el contador en
 - **Parámetros:** ninguno.
 - **Ubicación:** `frontend/main.js`.
 - **Qué hace:** arranque en `DOMContentLoaded`: restaura el alfabeto de `localStorage`, y
-  registra `SF29`-`SF32` como manejadores de eventos, más `SF33` y `SF34`.
+  registra `SF29`-`SF32` como manejadores de eventos, más `SF33`, `SF34` y `SF39`.
+
+### SF39
+- **Parámetros:** ninguno.
+- **Ubicación:** `frontend/main.js`.
+- **Qué hace:** ajusta el atributo `max` del campo de desplazamiento al máximo real que acepta
+  el backend para el alfabeto aplicado: `longitud del alfabeto - 1`. Si no hay alfabeto
+  aplicado todavía, usa el tope absoluto del sistema (`LIMITE_ALFABETO - 1` = 999). Si el
+  valor que ya tenía el campo supera el nuevo máximo, lo recorta.
+- **Detalle de Unicode:** la longitud se calcula como
+  `[...alfabeto.normalize("NFC")].length`, no con `alfabeto.length`. La propiedad `.length` de
+  JavaScript cuenta unidades UTF-16, así que un carácter fuera del plano básico (emoji,
+  jeroglífico) contaría como 2 y el frontend permitiría elegir un desplazamiento que el backend
+  rechazaría. Contar por puntos de código sobre la forma NFC reproduce exactamente el `len()`
+  que calcula Python después de normalizar.
+- **Quién la llama:** `SF29` (cada vez que se aplica o se rechaza un alfabeto) y `SF35` (al
+  cargar la página, incluido el caso de alfabeto restaurado desde `localStorage`).
